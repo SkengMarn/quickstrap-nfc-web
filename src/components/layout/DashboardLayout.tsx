@@ -1,4 +1,4 @@
-import React from 'react'
+// Dashboard layout component
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'

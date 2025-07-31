@@ -1,4 +1,16 @@
-import { ToastOptions as ReactToastifyOptions } from 'react-toastify';
+import { TypeOptions, ToastPosition, ToastClassName, ToastOptions as ReactToastifyOptions } from 'react-toastify';
+
+// Extend the ToastClassName type to include string for backward compatibility
+type ExtendedToastClassName = ToastClassName | string | ((context: any) => string);
+
+export type ToastOptions = Omit<ReactToastifyOptions, 'type' | 'position' | 'className'> & {
+  type?: TypeOptions;
+  position?: ToastPosition;
+  'data-entity'?: string;
+  'data-operation'?: string;
+  className?: ExtendedToastClassName;
+  autoClose?: number | false;
+};
 
 export type NotificationSeverity = 'critical' | 'error' | 'warning' | 'info' | 'debug';
 
@@ -52,6 +64,7 @@ export interface FunctionalNotification extends BaseNotification {
   operation: OperationType;
   technicalDetails?: string;
   data?: Record<string, unknown>;
+  severity: NotificationSeverity; // Made required to match usage in notifications.ts
 }
 
 export type Notification = SystemNotification | FunctionalNotification;

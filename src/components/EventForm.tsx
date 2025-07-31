@@ -67,31 +67,43 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
     
     // Validate required fields with notifications
     if (!formData.name) {
-      notification.functional({
-        entity: 'event',
-        operation: 'create',
-        message: 'Please provide a name for the event',
-        technicalDetails: 'Validation failed: Event name is required'
+      notification.error('Please provide a name for the event', {
+        'data-entity': 'event',
+        'data-operation': 'create',
+        autoClose: 5000,
+        context: {
+          validation: 'required_field',
+          field: 'name',
+          technicalDetails: 'Validation failed: Event name is required'
+        }
       });
       return;
     }
 
     if (!formData.start_date) {
-      notification.functional({
-        entity: 'event',
-        operation: 'create',
-        message: 'Please select a start date for the event',
-        technicalDetails: 'Validation failed: Start date is required'
+      notification.error('Please select a start date for the event', {
+        'data-entity': 'event',
+        'data-operation': 'create',
+        autoClose: 5000,
+        context: {
+          validation: 'required_field',
+          field: 'start_date',
+          technicalDetails: 'Validation failed: Start date is required'
+        }
       });
       return;
     }
 
     if (!formData.end_date) {
-      notification.functional({
-        entity: 'event',
-        operation: 'create',
-        message: 'Please select an end date for the event',
-        technicalDetails: 'Validation failed: End date is required'
+      notification.error('Please select an end date for the event', {
+        'data-entity': 'event',
+        'data-operation': 'create',
+        autoClose: 5000,
+        context: {
+          validation: 'required_field',
+          field: 'end_date',
+          technicalDetails: 'Validation failed: End date is required'
+        }
       });
       return;
     }
@@ -101,11 +113,13 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
     const endDate = new Date(formData.end_date);
     
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      notification.functional({
-        entity: 'event',
-        operation: 'create',
-        message: 'Please enter valid dates in the correct format',
-        technicalDetails: 'Validation failed: Invalid date format'
+      notification.error('Please enter valid dates in the correct format', {
+        'data-entity': 'event',
+        'data-operation': 'create',
+        autoClose: 5000,
+        context: {
+          technicalDetails: 'Validation failed: Invalid date format'
+        }
       });
       return;
     }
@@ -115,7 +129,10 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
         entity: 'event',
         operation: 'create',
         message: 'End date must be after the start date',
-        technicalDetails: 'Validation failed: Invalid date range'
+        severity: 'error',
+        technicalDetails: 'Validation failed: Invalid date range',
+        showInUI: true,
+        logToConsole: true
       });
       return;
     }
@@ -151,9 +168,15 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
       // Only proceed with navigation if the operation was successful
       if (data && data.length > 0) {
         if (isEdit) {
-          notification.updated('event', `Event "${formData.name}" updated successfully`);
+          notification.success(`Event "${formData.name}" updated successfully`, {
+            'data-entity': 'event',
+            'data-operation': 'update'
+          });
         } else {
-          notification.created('event', `Event "${formData.name}" created successfully`);
+          notification.success(`Event "${formData.name}" created successfully`, {
+            'data-entity': 'event',
+            'data-operation': 'create'
+          });
         }
         // Add a small delay to ensure the notification is visible before navigating
         setTimeout(() => {
@@ -208,15 +231,14 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
       }
       
       // Show user-friendly error notification
-      const errorMessageText = `Could not ${isEdit ? 'update' : 'create'} event`;
-      notification.system({
-        message: errorMessageText,
-        origin: 'EventForm',
-        severity: 'error',
-        code: errorCode,
+      const errorMessageText = `Could not ${isEdit ? 'update' : 'create'} event: ${errorMessage}`;
+      notification.error(errorMessageText, {
+        'data-entity': 'event',
+        'data-operation': isEdit ? 'update' : 'create',
+        autoClose: 5000,
         context: {
-          message: errorMessageText,
-          error: error instanceof Error ? error : new Error(errorMessage),
+          errorCode,
+          errorStack: process.env.NODE_ENV === 'development' ? errorStack : undefined,
           formData: process.env.NODE_ENV === 'development' ? formData : undefined
         }
       });

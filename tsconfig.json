@@ -4,10 +4,18 @@
     "useDefineForClassFields": true,
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "allowJs": false,
-    "skipLibCheck": true,
+    "skipLibCheck": false,  // Changed to false to catch more type issues
     "esModuleInterop": false,
     "allowSyntheticDefaultImports": true,
     "strict": true,
+    "noImplicitAny": true,  // Added to catch implicit any types
+    "strictNullChecks": true,  // Explicitly enabled for better null checking
+    "strictFunctionTypes": true,  // Added for better function type checking
+    "strictBindCallApply": true,  // Added for better function type checking
+    "noUnusedLocals": true,  // Added to catch unused variables
+    "noUnusedParameters": true,  // Added to catch unused parameters
+    "noImplicitReturns": true,  // Added to ensure all code paths return a value
+    "noFallthroughCasesInSwitch": true,  // Added to catch missing breaks in switch
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -18,8 +26,22 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    "typeRoots": [
+      "./node_modules/@types",
+      "./src/types"
+    ]
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist", "build"]
+  "include": [
+    "src",
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "**/node_modules/*",
+    "**/dist/*"
+  ]
 }

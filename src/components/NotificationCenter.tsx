@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Bell, Check, Clock, AlertCircle, CheckCircle, Info, XCircle } from 'lucide-react';
+import { X, Bell, Clock, AlertCircle, CheckCircle, Info, XCircle } from 'lucide-react';
 import { useNotificationStore, Notification, SystemNotification, FunctionalNotification } from '../stores/notificationStore';
 import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
 

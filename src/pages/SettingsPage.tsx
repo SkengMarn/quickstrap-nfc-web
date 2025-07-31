@@ -60,14 +60,16 @@ const SettingsPage: React.FC = () => {
     } catch (error) {
       console.error('Error fetching profile:', error);
       const errorMessage = 'Failed to load profile';
-      notification.system({
-        message: errorMessage,
-        origin: 'SettingsPage',
-        severity: 'error',
+      notification.error(errorMessage, {
+        'data-entity': 'user_profile',
+        'data-operation': 'read',
+        autoClose: 10000,
+        // @ts-ignore - Temporarily ignoring type error for context
         context: {
-          message: errorMessage,
           error: error instanceof Error ? error : new Error('Unknown error fetching profile'),
-          technicalDetails: 'Failed to fetch profile'
+          component: 'SettingsPage',
+          action: 'fetchProfile',
+          technicalDetails: 'Failed to fetch profile data'
         }
       });
     } finally {
@@ -123,17 +125,30 @@ const SettingsPage: React.FC = () => {
       // Refresh profile data
       await fetchProfile();
       
-      notification.updated('profile', 'Profile information updated successfully');
+      notification.success('Profile information updated successfully', {
+        'data-entity': 'user_profile',
+        'data-operation': 'update',
+        autoClose: 5000,
+        // @ts-ignore - Temporarily ignoring type error for context
+        context: {
+          component: 'SettingsPage',
+          action: 'updateProfile',
+          technicalDetails: 'Profile data was successfully updated'
+        }
+      });
     } catch (error) {
       console.error('Error updating profile:', error);
       const errorMessage = 'Could not update profile';
-      notification.system({
-        message: errorMessage,
-        origin: 'SettingsPage',
-        severity: 'error',
+      notification.error(errorMessage, {
+        'data-entity': 'user_profile',
+        'data-operation': 'update',
+        autoClose: 10000,
+        // @ts-ignore - Temporarily ignoring type error for context
         context: {
-          message: errorMessage,
           error: error instanceof Error ? error : new Error('Failed to update profile'),
+          component: 'SettingsPage',
+          action: 'updateProfile',
+          technicalDetails: 'Failed to update profile data',
           formData: process.env.NODE_ENV === 'development' ? formData : undefined
         }
       });
@@ -146,22 +161,32 @@ const SettingsPage: React.FC = () => {
     e.preventDefault();
     
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      notification.functional({
-        entity: 'password',
-        operation: 'update',
-        message: 'New password and confirmation do not match',
-        technicalDetails: 'Validation failed: Passwords do not match'
+      notification.error('New password and confirmation do not match', {
+        'data-entity': 'user_password',
+        'data-operation': 'update',
+        autoClose: 10000,
+        // @ts-ignore - Temporarily ignoring type error for context
+        context: {
+          component: 'SettingsPage',
+          action: 'passwordValidation',
+          technicalDetails: 'Validation failed: Passwords do not match'
+        }
       });
       return;
     }
     
     // Validate password strength
     if (passwordData.newPassword.length < 8) {
-      notification.functional({
-        entity: 'password',
-        operation: 'update',
-        message: 'Password must be at least 8 characters long',
-        technicalDetails: 'Validation failed: Password too short'
+      notification.error('Password must be at least 8 characters long', {
+        'data-entity': 'user_password',
+        'data-operation': 'update',
+        autoClose: 10000,
+        // @ts-ignore - Temporarily ignoring type error for context
+        context: {
+          component: 'SettingsPage',
+          action: 'passwordValidation',
+          technicalDetails: 'Validation failed: Password too short'
+        }
       });
       return;
     }

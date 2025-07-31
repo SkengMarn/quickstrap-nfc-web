@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Menu, Bell, User, LogOut, ChevronDown } from 'lucide-react'
+import { useState } from 'react'
+import { Menu, User, LogOut, ChevronDown } from 'lucide-react'
 import { supabase } from '../../services/supabase'
 import { useNavigate } from 'react-router-dom'
 import NotificationCenter from '../NotificationCenter'

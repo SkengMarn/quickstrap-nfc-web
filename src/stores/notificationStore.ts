@@ -1,6 +1,16 @@
 import { create } from 'zustand';
+import type { ToastOptions as ReactToastifyOptions, TypeOptions, ToastPosition, ToastClassName } from 'react-toastify';
 
 export type NotificationSeverity = 'critical' | 'error' | 'warning' | 'info' | 'debug' | 'success';
+
+export type ToastOptions = Omit<ReactToastifyOptions, 'type' | 'position' | 'className'> & {
+  type?: TypeOptions;
+  position?: ToastPosition;
+  'data-entity'?: string;
+  'data-operation'?: string;
+  className?: string | ToastClassName;
+  autoClose?: number | false;
+};
 export type OperationType = 
   | 'create' 
   | 'read' 
@@ -23,18 +33,7 @@ export type OperationType =
 
 export type NotificationCategory = 'system' | 'functional';
 
-export interface ToastOptions {
-  autoClose?: number | false;
-  className?: string;
-  position?: 'top-right' | 'top-center' | 'top-left' | 'bottom-right' | 'bottom-center' | 'bottom-left';
-  hideProgressBar?: boolean;
-  closeOnClick?: boolean;
-  pauseOnHover?: boolean;
-  draggable?: boolean;
-  progress?: number | undefined;
-  closeButton?: boolean;
-  [key: string]: any;
-}
+
 
 export interface BaseNotification {
   id: string;
@@ -79,7 +78,7 @@ export interface NotificationStore {
 
 const MAX_NOTIFICATIONS = 100; // Prevent memory issues
 
-export const useNotificationStore = create<NotificationStore>((set, get) => ({
+export const useNotificationStore = create<NotificationStore>((set) => ({
   notifications: [],
   unreadCount: 0,
 

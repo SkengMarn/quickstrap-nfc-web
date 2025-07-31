@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react'
-import { ArrowDownToLine, Bug, Filter, RefreshCw } from 'lucide-react'
-import SummaryCard from './SummaryCard'
-import CategoryBreakdown from './CategoryBreakdown'
-import FilterModal from './FilterModal'
+import React, { useCallback, useEffect, useState } from 'react';
+import { ArrowDownToLine, RefreshCw, Filter } from 'lucide-react';
+import SummaryCard from './SummaryCard';
+import CategoryBreakdown from './CategoryBreakdown';
+import FilterModal from './FilterModal';
 // Mock data for demo purposes
 const mockCategories = ['VIP', 'General Admission', 'Staff', 'Media', 'Artist']
 const mockStats = [
@@ -66,10 +66,11 @@ interface CategoryBreakdownProps {
 const EventStatsScreen: React.FC<EventStatsScreenProps> = ({ eventId }) => {
   const [stats, setStats] = useState<CategoryStat[]>([])
   const [categories, setCategories] = useState<string[]>([])
-  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set())
-  const [isLoading, setIsLoading] = useState(true)
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+  const [, setFilterCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
@@ -298,9 +299,13 @@ const EventStatsScreen: React.FC<EventStatsScreenProps> = ({ eventId }) => {
         onClose={() => setIsModalOpen(false)}
         categories={categories}
         selectedCategories={selectedCategories}
-        onApplyFilter={(selected) => setSelectedCategories(selected)}
+        onApplyFilter={(selected: Set<string>) => {
+          setSelectedCategories(selected);
+          setFilterCount(selected.size);
+        }}
       />
     </div>
-  )
-}
-export default EventStatsScreen
+  );
+};
+
+export default EventStatsScreen;

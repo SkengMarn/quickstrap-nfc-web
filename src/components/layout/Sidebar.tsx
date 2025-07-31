@@ -1,4 +1,4 @@
-import React from 'react'
+// Sidebar component
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
