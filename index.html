@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Event Admin Portal</title>
+    <script type="module">
+      // Environment variables will be injected by Vite during build
+      window.ENV = {
+        REACT_APP_SUPABASE_URL: import.meta.env.VITE_REACT_APP_SUPABASE_URL,
+        REACT_APP_SUPABASE_ANON_KEY: import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY
+      };
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
