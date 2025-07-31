@@ -297,13 +297,12 @@ const notification = {
       entity: 'app',
       operation: 'warning',
       severity: 'warning',
+      context: {},
       toastOptions: {
         ...options.toastOptions,
         className: 'toast-warning',
         autoClose: 8000
       }
-      context: {},
-      toastOptions: {}
     });
   },
 
