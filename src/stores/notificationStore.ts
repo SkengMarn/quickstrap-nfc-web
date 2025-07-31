@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
-type NotificationSeverity = 'critical' | 'error' | 'warning' | 'info' | 'debug';
-type OperationType = 
+export type NotificationSeverity = 'critical' | 'error' | 'warning' | 'info' | 'debug' | 'success';
+export type OperationType = 
   | 'create' 
   | 'read' 
   | 'update' 
@@ -21,6 +21,21 @@ type OperationType =
   | 'info'
   | 'success';
 
+export type NotificationCategory = 'system' | 'functional';
+
+export interface ToastOptions {
+  autoClose?: number | false;
+  className?: string;
+  position?: 'top-right' | 'top-center' | 'top-left' | 'bottom-right' | 'bottom-center' | 'bottom-left';
+  hideProgressBar?: boolean;
+  closeOnClick?: boolean;
+  pauseOnHover?: boolean;
+  draggable?: boolean;
+  progress?: number | undefined;
+  closeButton?: boolean;
+  [key: string]: any;
+}
+
 export interface BaseNotification {
   id: string;
   timestamp: Date;
@@ -37,24 +52,22 @@ export interface SystemNotification extends BaseNotification {
   code?: string;
   origin: string;
   severity: NotificationSeverity;
+  toastOptions?: ToastOptions;
 }
 
 export interface FunctionalNotification extends BaseNotification {
   category: 'functional';
   entity: string;
   operation: OperationType;
+  severity: NotificationSeverity;
   technicalDetails?: string;
   data?: Record<string, unknown>;
-  toastOptions?: {
-    autoClose?: number | false;
-    className?: string;
-    [key: string]: any;
-  };
+  toastOptions?: ToastOptions;
 }
 
 export type Notification = SystemNotification | FunctionalNotification;
 
-interface NotificationStore {
+export interface NotificationStore {
   notifications: Notification[];
   unreadCount: number;
   addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void;

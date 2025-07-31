@@ -4,26 +4,30 @@ import notification from '../utils/notifications';
 
 export default function NotificationTestPage() {
   const testSystemNotification = () => {
-    // Use the operation method for system notifications with context
-    notification.operation({
-      entity: 'system',
-      operation: 'notify',
+    notification.system({
       message: 'This is a system notification',
-      technicalDetails: 'System notification test',
-      data: { test: 'system' },
+      severity: 'info',
+      origin: 'test',
+      code: 'SYSTEM_NOTIFICATION',
+      context: { details: 'System notification test', test: 'system' },
       toastOptions: { autoClose: 3000 }
     });
   };
 
   const testSuccessNotification = () => {
-    notification.operation({
-      entity: 'test',
-      operation: 'create',
-      message: 'Operation completed successfully',
-      technicalDetails: 'Success notification test',
-      data: { test: 'success' },
-      toastOptions: { autoClose: 3000 }
-    });
+    notification.operation(
+      'create',
+      'test',
+      'Operation completed successfully',
+      {
+        severity: 'info',
+        context: { 
+          details: 'Success notification test',
+          test: 'success' 
+        },
+        toastOptions: { autoClose: 3000 }
+      }
+    );
   };
 
   const testErrorNotification = () => {
@@ -31,51 +35,62 @@ export default function NotificationTestPage() {
       // Simulate an error
       throw new Error('This is a test error');
     } catch (error) {
-      notification.operation({
-        entity: 'test',
-        operation: 'error',
-        message: 'An error occurred',
-        technicalDetails: error instanceof Error ? error.message : 'Unknown error',
-        data: { test: 'error' },
-        toastOptions: { autoClose: 5000 }
-      });
+      notification.operation(
+        'delete', // Using 'delete' as a valid operation type
+        'test',
+        'An error occurred',
+        {
+          severity: 'error',
+          context: { 
+            details: error instanceof Error ? error.message : 'Unknown error',
+            error: error instanceof Error ? error.stack : String(error),
+            test: 'error'
+          },
+          toastOptions: { autoClose: 5000 }
+        }
+      );
     }
   };
 
   const testWarningNotification = () => {
-    notification.operation({
-      entity: 'test',
-      operation: 'warning',
-      message: 'This is a warning',
-      technicalDetails: 'Warning notification test',
-      data: { test: 'warning' },
-      toastOptions: { autoClose: 4000 }
-    });
+    notification.operation(
+      'update', // Using 'update' as a valid operation type
+      'test',
+      'This is a warning',
+      {
+        severity: 'warning',
+        context: { 
+          details: 'Warning notification test',
+          test: 'warning' 
+        },
+        toastOptions: { autoClose: 4000 }
+      }
+    );
   };
 
   const testFunctionalNotification = () => {
-    notification.functional({
-      entity: 'test',
-      operation: 'create',
-      message: 'Test item created',
-      technicalDetails: 'Additional details about the operation',
-      data: { id: '123', name: 'Test Item' },
-      config: {
-        logToConsole: true,
-        showInUI: true,
-        message: 'Test item created',
-        category: 'functional',
-        context: { test: 'functional' },
+    notification.operation(
+      'create',
+      'test',
+      'Test item created',
+      {
+        severity: 'info',
+        context: { 
+          details: 'Additional details about the operation',
+          test: 'functional' 
+        },
+        data: { id: '123', name: 'Test Item' },
         toastOptions: { autoClose: 4500 }
       }
-    });
+    );
   };
 
   const testCrudNotifications = () => {
-    notification.created('test', 'Test item was created', { id: '123' });
-    notification.updated('test', 'Test item was updated', { id: '123' });
-    notification.deleted('test', 'Test item was deleted', { id: '123' });
-    notification.fetched('test', 'Test items were fetched', { count: 5 });
+    // CRUD helpers with proper typing
+    notification.created('Test Item', 'Test item was created', { id: '123' });
+    notification.updated('Test Item', 'Test item was updated', { id: '123' });
+    notification.deleted('Test Item', 'Test item was deleted', { id: '123' });
+    notification.fetched('Test Items', 'Test items were fetched', { count: 5 });
   };
 
   return (

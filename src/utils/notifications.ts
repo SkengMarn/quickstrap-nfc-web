@@ -1,45 +1,52 @@
-import { toast, ToastOptions } from 'react-toastify';
+import { toast, type ToastContent, type ToastOptions as ReactToastOptions } from 'react-toastify';
 import { v4 as uuidv4 } from 'uuid';
-import { notificationStore } from '@/stores/notificationStore';
+import { useNotificationStore } from '@/stores/notificationStore';
+import type {
+  NotificationSeverity,
+  OperationType,
+  NotificationCategory,
+  ToastOptions as StoreToastOptions,
+  BaseNotification,
+  SystemNotification,
+  FunctionalNotification
+} from '@/stores/notificationStore';
 
-type OperationType = 
-  | 'create' | 'read' | 'update' | 'delete' 
-  | 'success' | 'error' | 'warning' | 'info'
-  | 'login' | 'logout' | 'register' | 'password_reset'
-  | 'app_start' | 'session_timeout' | 'network_error';
+// Re-export types for convenience
+export type { OperationType, NotificationSeverity as Severity };
 
-type Severity = 'critical' | 'error' | 'warning' | 'info' | 'debug';
-type NotificationCategory = 'system' | 'functional';
+type ToastOptions = StoreToastOptions & Omit<ReactToastOptions, 'type'> & {
+  'data-entity'?: string;
+  'data-operation'?: string;
+  className?: string;
+};
 
-interface BaseNotification {
-  id: string;
-  timestamp: string;
-  category: NotificationCategory;
-  message: string;
-  logToConsole: boolean;
-  showInUI: boolean;
-  context?: Record<string, unknown>;
+// Type for toast function options
+type ToastFnOptions = ToastOptions & {
+  type?: 'info' | 'success' | 'warning' | 'error';
+  className?: string;
+  autoClose?: number | false;
+};
+
+type Notification = SystemNotification | FunctionalNotification;
+
+// Local type extensions for notification configs
+type SystemNotificationConfig = Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category'> & {
+  logToConsole?: boolean;
+  showInUI?: boolean;
   toastOptions?: ToastOptions;
+};
+
+// Extend the FunctionalNotification interface to include additional properties
+interface ExtendedFunctionalNotification extends Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category'> {
+  logToConsole?: boolean;
+  showInUI?: boolean;
+  toastOptions?: ToastOptions;
+  origin?: string;
+  // Add any other missing properties that might be needed
+  [key: string]: unknown;
 }
 
-export interface SystemNotification extends BaseNotification {
-  category: 'system';
-  code?: string;
-  origin: string;
-  severity: Severity;
-}
-
-export interface FunctionalNotification extends BaseNotification {
-  category: 'functional';
-  entity: string;
-  operation: OperationType;
-  severity: Severity;
-  technicalDetails?: string;
-  data?: Record<string, unknown>;
-}
-
-type NotificationConfig = Omit<SystemNotification, 'id' | 'timestamp' | 'category'> | 
-                         Omit<FunctionalNotification, 'id' | 'timestamp' | 'category'>;
+type FunctionalNotificationConfig = ExtendedFunctionalNotification;
 
 type ToastFunction = (message: string, options?: ToastOptions) => void;
 
@@ -49,21 +56,94 @@ const defaultToastOptions: ToastOptions = {
   closeOnClick: true,
   pauseOnHover: true,
   draggable: true,
-  progress: undefined,
+  position: 'top-right',
+  hideProgressBar: false,
+  closeButton: true,
+  className: 'toast-notification'
 };
 
-// Map severity levels to toast functions
-const severityToToastFn: Record<Severity, ToastFunction> = {
-  critical: (msg, opts) => toast.error(msg, { ...opts, className: 'toast-critical' }),
-  error: (msg, opts) => toast.error(msg, { ...opts, className: 'toast-error' }),
-  warning: (msg, opts) => toast.warn(msg, { ...opts, className: 'toast-warning' }),
-  info: (msg, opts) => toast.info(msg, { ...opts, className: 'toast-info' }),
-  debug: (msg, opts) => toast.info(msg, { ...opts, className: 'toast-debug' })
+// Map severity to toast functions with proper typing
+// Extend the type to include 'trace' which is used in the codebase
+const severityToToastFn: Record<NotificationSeverity | 'trace', ToastFunction> = {
+  error: (content: React.ReactNode, options?: ToastOptions) => {
+    const toastOptions: ToastFnOptions = {
+      ...defaultToastOptions,
+      ...options,
+      type: 'error',
+      className: `toast-error ${options?.className || ''}`.trim()
+    };
+    return toast.error(content, toastOptions);
+  },
+  warning: (content: React.ReactNode, options?: ToastOptions) => {
+    const toastOptions: ToastFnOptions = {
+      ...defaultToastOptions,
+      ...options,
+      type: 'warning',
+      className: `toast-warning ${options?.className || ''}`.trim()
+    };
+    return toast.warning(content, toastOptions);
+  },
+  info: (content: React.ReactNode, options?: ToastOptions) => {
+    const toastOptions: ToastFnOptions = {
+      ...defaultToastOptions,
+      ...options,
+      type: 'info',
+      className: `toast-info ${options?.className || ''}`.trim()
+    };
+    return toast.info(content, toastOptions);
+  },
+  // Map 'success' to 'info' since 'success' is not a valid NotificationSeverity
+  success: (content: React.ReactNode, options?: ToastOptions) => {
+    const toastOptions: ToastFnOptions = {
+      ...defaultToastOptions,
+      ...options,
+      type: 'info',
+      className: `toast-info ${options?.className || ''}`.trim()
+    };
+    return toast.info(content, toastOptions);
+  },
+  debug: (content: React.ReactNode, options?: ToastOptions) => {
+    const toastOptions: ToastFnOptions = {
+      ...defaultToastOptions,
+      ...options,
+      type: 'info',
+      className: `toast-debug ${options?.className || ''}`.trim()
+    };
+    return toast.info(content, toastOptions);
+  },
+  trace: (content: React.ReactNode, options?: ToastOptions) => {
+    const toastOptions: ToastFnOptions = {
+      ...defaultToastOptions,
+      ...options,
+      type: 'info',
+      className: `toast-trace ${options?.className || ''}`.trim()
+    };
+    return toast.info(content, toastOptions);
+  },
+  critical: (content: React.ReactNode, options?: ToastOptions) => {
+    const toastOptions: ToastFnOptions = {
+      ...defaultToastOptions,
+      ...options,
+      type: 'error',
+      autoClose: false,
+      className: `toast-critical ${options?.className || ''}`.trim()
+    };
+    return toast.error(content, toastOptions);
+  }
 };
+
+// Helper to get the appropriate toast function based on severity
+const getToastFunction = (severity: NotificationSeverity | 'trace' = 'info'): ToastFunction => {
+  // For 'trace' severity, use 'debug' as a fallback since 'trace' is not a valid NotificationSeverity
+  const validSeverity = severity === 'trace' ? 'debug' : severity;
+  return severityToToastFn[validSeverity] || severityToToastFn.info;
+};
+
+// CRUD operation helpers - these will be implemented as methods on the notification object
 
 // Helper to get operation display text
-const getOperationText = (operation: OperationType): string => {
-  const map: Record<string, string> = {
+const getOperationText = (operation: string): string => {
+  const operationMap: Record<string, string> = {
     create: 'created',
     read: 'fetched',
     update: 'updated',
@@ -72,346 +152,216 @@ const getOperationText = (operation: OperationType): string => {
     logout: 'logged out',
     register: 'registered',
     password_reset: 'password reset',
+    access_grant: 'access granted',
+    access_revoke: 'access revoked',
     app_start: 'app started',
     session_timeout: 'session timed out',
     network_error: 'network error',
+    config_load: 'config loaded',
+    auth_error: 'authentication error',
+    info: 'info',
+    success: 'completed successfully',
+    error: 'failed',
+    notify: 'notification'
   };
-  return map[operation] || operation;
+
+  return operationMap[operation] || operation;
 };
 
-type OperationType = 
-  | 'create' | 'read' | 'update' | 'delete' 
-  | 'success' | 'error' | 'warning' | 'info'
-  | 'login' | 'logout' | 'register' | 'password_reset'
-  | 'app_start' | 'session_timeout' | 'network_error';
+// Map severity to console methods
+const consoleMethods = {
+  critical: console.error,
+  error: console.error,
+  warning: console.warn,
+  info: console.log,
+  debug: console.debug,
+  success: console.log, // Map success to console.log
+  // Note: 'trace' is not a valid NotificationSeverity, so we'll use a type assertion here
+} as Record<NotificationSeverity | 'trace', (...data: any[]) => void>;
 
-type NotificationCategory = 'system' | 'functional';
-type Severity = 'critical' | 'error' | 'warning' | 'info' | 'debug';
-
-interface BaseNotificationConfig {
-  category: NotificationCategory;
-  message: string;
-  logToConsole?: boolean;
-  showInUI?: boolean;
-  context?: Record<string, unknown>;
-  toastOptions?: ToastOptions;
-}
-
-interface SystemNotificationConfig extends BaseNotificationConfig {
-  category: 'system';
-  code?: string;
-  origin: string;
-  severity: Severity;
-}
-
-interface FunctionalNotificationConfig extends BaseNotificationConfig {
-  category: 'functional';
-  entity: string;
-  operation: OperationType;
-  severity?: Severity;
-  technicalDetails?: string;
-  data?: Record<string, unknown>;
-}
-
-type Notification = SystemNotificationConfig | FunctionalNotificationConfig;
-
-// Map severity levels to toast functions
-const severityToToastFn: Record<string, ToastFunction> = {
-  critical: toast.error,
-  error: toast.error,
-  warning: toast.warn,
-  info: toast.info,
-  success: toast.success,
-  debug: toast.info
-};
-
-// Default toast options
-const defaultToastOptions: ToastOptions = {
-  autoClose: 5000,
-  closeOnClick: true,
-  pauseOnHover: true,
-  draggable: true,
-  progress: undefined,
-};
-
-// Helper to get operation display text
-const getOperationText = (operation: OperationType): string => {
-  const map: Record<string, string> = {
-    create: 'created',
-    read: 'fetched',
-    update: 'updated',
-    delete: 'deleted',
-    login: 'logged in',
-    logout: 'logged out',
-    register: 'registered',
-    password_reset: 'password reset',
-    app_start: 'app started',
-    session_timeout: 'session timed out',
-    network_error: 'network error',
-  };
-  return map[operation] || operation;
+// Helper to safely log to console with severity
+const logWithSeverity = (severity: NotificationSeverity, message: string, context?: unknown) => {
+  const logMessage = `[${severity.toUpperCase()}] ${message}`;
+  const logFn = consoleMethods[severity] || console.log;
+  logFn(logMessage, context || '');
 };
 
 // Notification utility implementation
-const notification = {
+const notificationImpl = {
   // System notification method
-  system: (config: Omit<SystemNotificationConfig, 'category'>) => {
-    const notification: SystemNotificationConfig = {
+  system: (config: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category'>): SystemNotification => {
+    const notification: SystemNotification = {
       ...config,
-      category: 'system',
       id: uuidv4(),
-      timestamp: new Date().toISOString(),
-      config: {
-        logToConsole: config.logToConsole ?? true,
-        showInUI: config.showInUI ?? true,
-        context: config.context,
-        toastOptions: { ...defaultToastOptions, ...config.toastOptions }
-      }
-    };
-
-    // Log to console if enabled
-    if (notification.config.logToConsole) {
-      const logLevel = notification.severity === 'critical' || notification.severity === 'error' 
-        ? 'error' 
-        : notification.severity === 'warning' 
-          ? 'warn' 
-          : 'log';
-      
-      const consoleMethod = console[logLevel as keyof Console] || console.log;
-      consoleMethod(`[${notification.severity.toUpperCase()}] ${notification.message}`, {
-        code: notification.code,
-        origin: notification.origin,
-        context: notification.config.context
-      });
-    }
-
-    // Show in UI if enabled
-    if (notification.config.showInUI) {
-      const toastFn = severityToToastFn[notification.severity] || toast;
-      toastFn(notification.message, {
-        ...notification.config.toastOptions,
-        'data-notification-type': 'system',
-        'data-severity': notification.severity
-      });
-    }
-
-    // Add to store
-    notificationStore.add(notification);
-  },
-
-  // Functional notification method
-  functional: (config: Omit<FunctionalNotificationConfig, 'category'>) => {
-    const notification: FunctionalNotificationConfig = {
-      ...config,
-      category: 'functional',
+      timestamp: new Date(),
+      read: false,
+      category: 'system',
+      code: config.code || 'SYSTEM_NOTIFICATION',
+      origin: config.origin || 'system',
+      severity: config.severity || 'info',
+      message: config.message || 'System notification',
       logToConsole: config.logToConsole ?? true,
       showInUI: config.showInUI ?? true,
-      severity: config.severity || 'info',
-      toastOptions: { ...defaultToastOptions, ...config.toastOptions }
+      context: config.context || {},
+      toastOptions: {
+        ...defaultToastOptions,
+        ...(config.toastOptions || {})
+      }
     };
 
     // Log to console if enabled
     if (notification.logToConsole) {
-      const operationText = getOperationText(notification.operation);
-      console.log(`[${operationText.toUpperCase()}] ${notification.entity}: ${notification.message}`, {
-        operation: notification.operation,
-        entity: notification.entity,
-        technicalDetails: notification.technicalDetails,
-        data: notification.data,
-        context: notification.context
-      });
+      logWithSeverity(notification.severity, notification.message, notification.context);
     }
 
     // Show in UI if enabled
-    if (notification.showInUI) {
-      const toastFn = severityToToastFn[notification.severity] || toast;
+    if (notification.showInUI && notification.toastOptions) {
+      const toastFn = getToastFunction(notification.severity);
       toastFn(notification.message, {
+        ...defaultToastOptions,
         ...notification.toastOptions,
-        'data-notification-type': 'functional',
-        'data-entity': notification.entity,
-        'data-operation': notification.operation
+        toastId: notification.code || `toast-${Date.now()}`,
+        data: {
+          ...notification.context,
+          entity: 'system',
+          operation: notification.origin
+        }
       });
     }
 
     // Add to store
-    notificationStore.add(notification);
+    useNotificationStore.getState().addNotification(notification);
+    return notification;
   },
 
-  // Helper for CRUD operations
-  operation: (operation: OperationType, entity: string, message: string, options: Omit<FunctionalNotificationConfig, 'category' | 'message' | 'operation' | 'entity'> = {}) => {
-    const severity = options.severity || 
-      (operation === 'error' ? 'error' : 
-       operation === 'warning' ? 'warning' : 'info');
+  // Functional notification method
+  functional: (config: ExtendedFunctionalNotification): FunctionalNotification => {
+    // Ensure required properties are provided
+    const severity = config.severity || 'info';
+    const origin = config.origin || 'unknown';
     
-    notification.functional({
-      ...options,
-      entity,
-      operation,
-      message,
+    // Create the notification object with required properties
+    // We'll exclude the origin from the spread since it's not part of the FunctionalNotification type
+    const { origin: _, ...restConfig } = config;
+    
+    const notification: FunctionalNotification = {
+      ...restConfig,
+      id: uuidv4(),
+      timestamp: new Date(),
+      read: false,
+      category: 'functional' as const,
       severity,
+      context: config.context || {},
+      data: config.data || {},
+      logToConsole: config.logToConsole ?? true,
+      showInUI: config.showInUI ?? true,
       toastOptions: {
-        ...options.toastOptions,
-        className: `toast-${operation}`,
-        autoClose: operation === 'error' ? 10000 : 5000
+        ...defaultToastOptions,
+        ...(config.toastOptions || {})
       }
-    });
+    };
+
+    // Log to console if enabled
+    if (notification.logToConsole) {
+      logWithSeverity(
+        notification.severity,
+        `[${notification.operation}] ${notification.entity}: ${notification.message}`,
+        notification.context
+      );
+    }
+
+    // Show in UI if enabled
+    if (notification.showInUI) {
+      const toastFn = getToastFunction(notification.severity);
+      const toastOptions = notification.toastOptions || {};
+      toastFn(notification.message, {
+        ...toastOptions,
+        'data-entity': notification.entity,
+        'data-operation': notification.operation,
+        className: `toast-${notification.severity} ${toastOptions.className || ''}`.trim()
+      });
+    }
+
+    // Add to store
+    useNotificationStore.getState().addNotification(notification);
+    return notification;
   },
 
-  // Helper for success notifications
-  success: (message: string, options: Omit<FunctionalNotificationConfig, 'category' | 'message' | 'operation' | 'entity'> = {}) => {
-    notification.functional({
+  // Operation helper method
+  operation: (
+    operation: OperationType,
+    entity: string,
+    message: string,
+    options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'operation' | 'entity' | 'message'> & {
+      severity?: NotificationSeverity;
+    } = { severity: 'info' } // Provide a default severity
+  ): FunctionalNotification => {
+    // Ensure required properties are provided with proper types
+    const severity: NotificationSeverity = options.severity || 'info';
+    
+    // Create a new options object with required properties
+    const notificationOptions = {
       ...options,
+      operation,
+      entity,
       message,
-      entity: 'app',
-      operation: 'success',
-      severity: 'success',
-      toastOptions: {
-        ...options.toastOptions,
-        className: 'toast-success',
-        autoClose: 5000
-      }
-    });
-  },
-
-  // Helper for error notifications
-  error: (message: string, options: Omit<FunctionalNotificationConfig, 'category' | 'message' | 'operation' | 'entity'> = {}) => {
-    notification.functional({
-      ...options,
-      message,
-      entity: 'app',
-      operation: 'error',
-      severity: 'error',
-      toastOptions: {
-        ...options.toastOptions,
-        className: 'toast-error',
-        autoClose: 10000
-      }
-    });
-  },
-
-  // Helper for warning notifications
-  warning: (message: string, options: Omit<FunctionalNotificationConfig, 'category' | 'message' | 'operation' | 'entity'> = {}) => {
-    notification.functional({
-      ...options,
-      message,
-      entity: 'app',
-      operation: 'warning',
-      severity: 'warning',
-      context: {},
-      toastOptions: {
-        ...options.toastOptions,
-        className: 'toast-warning',
-        autoClose: 8000
-      }
-    });
+      severity
+    };
+    
+    return notificationImpl.functional(notificationOptions);
   },
 
   // Alias for info for backward compatibility
-  notify(message: string, options: Omit<ToastOptions, 'data-entity' | 'data-operation'> = {}) {
-    return this.functional({
+  notify: (message: string, options: Omit<ToastOptions, 'data-entity' | 'data-operation'> = {}) => {
+    return notificationImpl.functional({
       entity: 'app',
       operation: 'notify',
       message,
-      data: { ...options },
+      severity: 'info',
       context: {},
       logToConsole: true,
       showInUI: true,
-      toastOptions: {}
+      toastOptions: {
+        ...defaultToastOptions,
+        ...options
+      }
     });
   },
 
-  // Operation-specific notification
-  operation(config: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category'>) {
-    const { entity = 'app', operation = 'notify', toastOptions, ...rest } = config;
-    
-    // Create the notification data
-    const notificationData = {
-      ...rest,
-      entity,
-      operation,
-      message: rest.message || `${getOperationText(operation)} ${entity}`,
-      technicalDetails: rest.technicalDetails || '',
-      data: rest.data || {},
-      toastOptions: toastOptions || { autoClose: 5000 }
-    };
-    
-    // Add to notification store
-    const store = useNotificationStore.getState();
-    store.addNotification({
-      ...notificationData,
-      category: 'functional' as const,
-      logToConsole: true,
-      showInUI: true,
-      context: { source: 'notification.operation', ...(rest as any).context },
-    });
-    
-    // Show toast if configured
-    if (notificationData.showInUI !== false) {
-      const toastFn = severityToToastType[operation === 'error' ? 'error' : 'info'];
-      toastFn(notificationData.message, {
-        ...defaultOptions,
-        ...notificationData.toastOptions,
-        'data-entity': entity,
-        'data-operation': operation,
-      });
-    }
-    
-    return notificationData;
-  },
-
-  created(entity: string, message: string, data?: Record<string, unknown>) {
-    return this.functional({
-      entity,
-      operation: 'create',
-      message: message || `${entity} created successfully`,
-      data: data || {},
-      context: {},
-      logToConsole: true,
-      showInUI: true,
-      toastOptions: {}
+  // CRUD operation helpers
+  created: (entity: string, message: string, data: Record<string, unknown> = {}) => {
+    return notificationImpl.operation('create', entity, message, {
+      data,
+      severity: 'info',
+      context: { action: 'create', entity, data }
     });
   },
 
-  updated(entity: string, message: string, data?: Record<string, unknown>) {
-    return this.functional({
-      entity,
-      operation: 'update',
-      message: message || `${entity} updated successfully`,
-      data: data || {},
-      context: {},
-      logToConsole: true,
-      showInUI: true,
-      toastOptions: {}
+  updated: (entity: string, message: string, data: Record<string, unknown> = {}) => {
+    return notificationImpl.operation('update', entity, message, {
+      data,
+      severity: 'info',
+      context: { action: 'update', entity, data }
     });
   },
 
-  deleted(entity: string, message: string, data?: Record<string, unknown>) {
-    return this.functional({
-      entity,
-      operation: 'delete',
-      message: message || `${entity} deleted successfully`,
-      data: data || {},
-      context: {},
-      logToConsole: true,
-      showInUI: true,
-      toastOptions: {}
+  deleted: (entity: string, message: string, data: Record<string, unknown> = {}) => {
+    return notificationImpl.operation('delete', entity, message, {
+      data,
+      severity: 'warning',
+      context: { action: 'delete', entity, data }
     });
   },
 
-  fetched(entity: string, message: string, data?: Record<string, unknown>) {
-    return this.functional({
-      entity,
-      operation: 'read',
-      message: message || `${entity} fetched successfully`,
-      data: data || {},
-      context: {},
-      logToConsole: true,
-      showInUI: true,
-      toastOptions: {}
+  fetched: (entity: string, message: string, data: Record<string, unknown> = {}) => {
+    return notificationImpl.operation('read', entity, message, {
+      data,
+      severity: 'info',
+      context: { action: 'read', entity, data }
     });
   }
 };
 
 // Export the notification object with proper typing
-const notification: typeof notificationImpl = notificationImpl;
+export const notification = notificationImpl;
 export default notification;
