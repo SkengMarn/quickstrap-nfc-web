@@ -28,12 +28,12 @@ const EventsPage = () => {
     } catch (error) {
       console.error('Error fetching events:', error);
       notification.error('Could not load events', error, {
-        entity: 'events',
-        operation: 'read',
-        severity: 'error',
-        technicalDetails: error instanceof Error ? error.message : 'Failed to fetch events',
+        origin: 'app',
         context: {
-          error: error instanceof Error ? error : new Error('Failed to fetch events')
+          entity: 'events',
+          operation: 'read',
+          error: error instanceof Error ? error : new Error('Failed to fetch events'),
+          technicalDetails: error instanceof Error ? error.message : 'Failed to fetch events'
         },
         toastOptions: {
           autoClose: 10000
@@ -58,13 +58,13 @@ const EventsPage = () => {
     try {
       // Show warning about related data deletion
       notification.warning(`Deleting "${eventToDelete.name}" and all its related data...`, {
-        entity: 'event',
-        operation: 'delete',
-        severity: 'warning',
-        technicalDetails: 'Initiating deletion of event and all related data',
+        origin: 'app',
         context: {
+          entity: 'event',
+          operation: 'delete',
           eventId: id,
-          eventName: eventToDelete.name
+          eventName: eventToDelete.name,
+          technicalDetails: 'Initiating deletion of event and all related data'
         },
         toastOptions: {
           autoClose: 3000
@@ -96,32 +96,33 @@ const EventsPage = () => {
         `Event "${eventToDelete.name}" was successfully deleted.\n` +
         'Note: This action cannot be undone. All related data has been removed.',
         {
-          entity: 'event',
-          operation: 'delete',
-          severity: 'success',
-          technicalDetails: 'Event and all related data have been permanently removed',
+          origin: 'app',
           context: {
+            entity: 'event',
+            operation: 'delete',
             eventId: id,
-            eventName: eventToDelete.name
+            eventName: eventToDelete.name,
+            technicalDetails: 'Event and all related data have been permanently removed'
           },
           toastOptions: {
-            autoClose: 8000
+            autoClose: 10000
           }
-      });
+        }
+      );
       
     } catch (error) {
       notification.error(
         `Failed to delete event "${eventToDelete?.name || 'Unknown'}". Please try again.`,
         error,
         {
-          entity: 'event',
-          operation: 'delete',
-          severity: 'error',
-          technicalDetails: error instanceof Error ? error.message : 'Failed to delete event',
+          origin: 'app',
           context: {
+            entity: 'event',
+            operation: 'delete',
             eventId: id,
             eventName: eventToDelete?.name,
-            error: error instanceof Error ? error : new Error(String(error))
+            error: error instanceof Error ? error : new Error(String(error)),
+            technicalDetails: error instanceof Error ? error.message : 'Failed to delete event'
           },
           toastOptions: { 
             autoClose: 10000 

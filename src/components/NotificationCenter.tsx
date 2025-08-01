@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Bell, Clock, AlertCircle, CheckCircle, Info, XCircle } from 'lucide-react';
 import { useNotificationStore } from '../stores/notificationStore';
-import type { Notification, SystemNotification, FunctionalNotification } from '@/types/notifications';
+import type { Notification, SystemNotification, FunctionalNotification } from '@/types/notification.types';
 import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
 
 const NotificationCenter: React.FC = () => {

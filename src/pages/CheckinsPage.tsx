@@ -1,7 +1,7 @@
-import React, { useEffect, useState, createElement } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { supabase, Event, CheckinLog } from '../services/supabase'
-import { Search, Download, Calendar, Filter } from 'lucide-react'
+import { supabase } from '../services/supabase'
+import { Search, Download, Filter } from 'lucide-react'
 const CheckinsPage = () => {
   const [searchParams] = useSearchParams()
   const eventIdParam = searchParams.get('eventId')

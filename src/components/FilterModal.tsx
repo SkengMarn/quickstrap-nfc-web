@@ -23,11 +23,10 @@ const FilterModal: React.FC<FilterModalProps> = ({
       setLocalSelected(new Set(selectedCategories))
     }
   }, [isOpen, selectedCategories])
+  
   if (!isOpen) return null
+  
   const toggleCategory = (category: string): void => {
-    const getCheckboxClass = (isSelected: boolean): string => {
-      return isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-400'
-    }
     const newSelected = new Set(localSelected)
     if (newSelected.has(category)) {
       newSelected.delete(category)
@@ -36,10 +35,9 @@ const FilterModal: React.FC<FilterModalProps> = ({
     }
     setLocalSelected(newSelected)
   }
-  const handleApply = (): void => {
-    onApplyFilter(localSelected)
-    onClose()
-  }
+  // Apply the selected filters and close the modal
+  onApplyFilter(localSelected)
+  onClose()
   const toggleAll = (): void => {
     if (localSelected.size === categories.length) {
       setLocalSelected(new Set())

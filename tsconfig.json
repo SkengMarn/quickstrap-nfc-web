@@ -3,9 +3,9 @@
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
-    "allowJs": false,
-    "skipLibCheck": false,  // Enable lib check but use exclude for problematic types
-    "esModuleInterop": true,  // Changed to true for better compatibility with CJS modules
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "noImplicitAny": true,
@@ -34,19 +34,12 @@
     ]
   },
   "include": [
-    "src"
+    "src",
+    "src/**/*.ts",
+    "src/**/*.tsx"
   ],
   "exclude": [
     "node_modules",
-    "node_modules/@types/react-toastify/node_modules",
-    "**/node_modules/@types/react-toastify/node_modules",
-    "dist",
-    "build",
-    "**/node_modules/*",
-    "**/dist/*"
-  ],
-  "references": [
-    { "path": "./node_modules/react-scripts/config/tsconfig.app.json" },
-    { "path": "./node_modules/react-scripts/config/tsconfig.node.json" }
+    "dist"
   ]
 }

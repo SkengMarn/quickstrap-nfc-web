@@ -68,13 +68,13 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
     // Validate required fields with notifications
     if (!formData.name) {
       notification.error('Please provide a name for the event', undefined, {
-        entity: 'event',
-        operation: 'create',
-        severity: 'error',
-        technicalDetails: 'Validation failed: Event name is required',
+        origin: 'app',
         context: {
+          entity: 'event',
+          operation: 'create',
           validation: 'required_field',
-          field: 'name'
+          field: 'name',
+          technicalDetails: 'Validation failed: Event name is required'
         },
         toastOptions: {
           autoClose: 5000
@@ -85,13 +85,13 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
 
     if (!formData.start_date) {
       notification.error('Please select a start date for the event', undefined, {
-        entity: 'event',
-        operation: 'create',
-        severity: 'error',
-        technicalDetails: 'Validation failed: Start date is required',
+        origin: 'app',
         context: {
+          entity: 'event',
+          operation: 'create',
           validation: 'required_field',
-          field: 'start_date'
+          field: 'start_date',
+          technicalDetails: 'Validation failed: Start date is required'
         },
         toastOptions: {
           autoClose: 5000
@@ -102,12 +102,12 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
 
     if (!formData.end_date) {
       notification.error('Please select an end date for the event', undefined, {
-        entity: 'event',
-        operation: 'create',
-        severity: 'error',
-        technicalDetails: 'Validation failed: End date is required',
+        origin: 'app',
         context: {
+          entity: 'event',
+          operation: 'create',
           validation: 'required_field',
+          technicalDetails: 'Validation failed: End date is required',
           field: 'end_date'
         },
         toastOptions: {
@@ -123,10 +123,12 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
     
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
       notification.error('Please enter valid dates in the correct format', undefined, {
-        entity: 'event',
-        operation: 'create',
-        severity: 'error',
-        technicalDetails: 'Validation failed: Invalid date format',
+        origin: 'app',
+        context: {
+          entity: 'event',
+          operation: 'create',
+          technicalDetails: 'Validation failed: Invalid date format'
+        },
         toastOptions: {
           autoClose: 5000
         }
@@ -136,11 +138,14 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
     
     if (endDate <= startDate) {
       notification.error('End date must be after the start date', {
-        entity: 'event',
-        operation: 'create',
-        technicalDetails: 'Validation failed: Invalid date range',
-        showInUI: true,
-        logToConsole: true
+        origin: 'app',
+        context: {
+          entity: 'event',
+          operation: 'create',
+          technicalDetails: 'Validation failed: Invalid date range',
+          showInUI: true,
+          logToConsole: true
+        }
       });
       return;
     }
@@ -177,15 +182,19 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
       if (data && data.length > 0) {
         if (isEdit) {
           notification.success(`Event "${formData.name}" updated successfully`, {
-            entity: 'event',
-            operation: 'update',
-            severity: 'success'
+            origin: 'app',
+            context: {
+              entity: 'event',
+              operation: 'update'
+            }
           });
         } else {
           notification.success(`Event "${formData.name}" created successfully`, {
-            entity: 'event',
-            operation: 'create',
-            severity: 'success'
+            origin: 'app',
+            context: {
+              entity: 'event',
+              operation: 'create'
+            }
           });
         }
         // Add a small delay to ensure the notification is visible before navigating

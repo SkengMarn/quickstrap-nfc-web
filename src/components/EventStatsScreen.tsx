@@ -43,26 +43,6 @@ interface EventStatsScreenProps {
   eventId: string;
 }
 
-interface FilterModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  categories: string[];
-  selectedCategories: Set<string>;
-  onApplyFilter: (selected: Set<string>) => void;
-}
-
-interface SummaryCardProps {
-  totalWristbands: number;
-  checkedInWristbands: number;
-  checkinPercentage: number;
-  isFiltered: boolean;
-  filterCount: number;
-}
-
-interface CategoryBreakdownProps {
-  stats: CategoryStat[];
-}
-
 const EventStatsScreen: React.FC<EventStatsScreenProps> = ({ eventId }) => {
   const [stats, setStats] = useState<CategoryStat[]>([])
   const [categories, setCategories] = useState<string[]>([])
@@ -129,7 +109,7 @@ const EventStatsScreen: React.FC<EventStatsScreenProps> = ({ eventId }) => {
   // Export to CSV function
   const exportToCsv = (): void => {
     if (stats.length === 0) {
-      showToast('No data to export', 'warning');
+      showToast('No data to export');
       return;
     }
     
@@ -164,52 +144,7 @@ const EventStatsScreen: React.FC<EventStatsScreenProps> = ({ eventId }) => {
     document.body.removeChild(link);
   };
 
-  const handleRefresh = async (): Promise<void> => {
-    if (stats.length === 0) {
-      showToast('No data to export', 'warning')
-      return
-    }
-    try {
-      let csv = 'Category,Total Wristbands,Checked In,Check-in %\n'
-      csv += `Total,${totalWristbands},${checkedInWristbands},${checkinPercentage.toFixed(1)}%\n`
-      filteredStats.forEach((stat) => {
-        const percentage =
-          stat.totalWristbands > 0
-            ? ((stat.checkedInWristbands / stat.totalWristbands) * 100).toFixed(
-                1,
-              )
-            : '0'
-        csv += `${stat.category},${stat.totalWristbands},${stat.checkedInWristbands},${percentage}%\n`
-      })
-      // Create a blob and use native browser download API
-      const blob = new Blob([csv], {
-        type: 'text/csv;charset=utf-8',
-      })
-      // Create a temporary URL for the blob
-      const url = URL.createObjectURL(blob)
-      // Create a temporary anchor element to trigger download
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', `event_stats_${new Date().getTime()}.csv`)
-      document.body.appendChild(link)
-      link.click()
-      // Clean up
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-      showToast('Export successful!', 'success')
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      showToast(`Export failed: ${errorMessage}`, 'error')
-    }
-  }
-
-  // Toast notification helper
-  const showError = (message: string): void => {
-    // In a real app, you'd use a toast library
-    alert(message)
-  }
-
-  const showToast = (message: string, type: string = 'info'): void => {
+  const showToast = (message: string): void => {
     // In a real app, you'd use a toast library
     alert(message)
   }

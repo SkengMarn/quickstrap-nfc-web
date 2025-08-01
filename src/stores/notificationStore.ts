@@ -1,119 +1,74 @@
 import { create } from 'zustand';
-import type { 
-  Notification, 
-  SystemNotification, 
-  FunctionalNotification,
-  SystemNotificationConfig,
-  FunctionalNotificationConfig,
-  Severity
-} from '@/types/notification.types';
+import type { Notification, SystemNotification, FunctionalNotification, Severity } from '@/types/notification.types';
 
 interface NotificationStore {
   notifications: Notification[];
   unreadCount: number;
-  add: (notification: Notification) => void;
-  addNotification: (notification: Notification) => void; // Alias for add
+  addNotification: (notification: Notification) => void;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   clear: () => void;
-  remove: (id: string) => void;
-  getNotifications: () => Notification[];
-  getUnreadCount: () => number;
-  createSystemNotification: (config: Omit<SystemNotificationConfig, 'severity'>, severity: Severity) => SystemNotification;
-  createFunctionalNotification: (config: Omit<FunctionalNotificationConfig, 'severity'>, severity: Severity) => FunctionalNotification;
+  removeNotification: (id: string) => void;
+  createSystemNotification: (config: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category'>, severity?: Severity) => SystemNotification;
+  createFunctionalNotification: (config: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category'>, severity?: Severity) => FunctionalNotification;
 }
-
-const MAX_NOTIFICATIONS = 100; // Prevent memory issues
 
 export const useNotificationStore = create<NotificationStore>((set, get) => ({
   notifications: [],
   unreadCount: 0,
 
-  add: (notification: Notification) => {
-    set((state) => {
-      const notifications = [notification, ...state.notifications].slice(0, MAX_NOTIFICATIONS);
-      return {
-        notifications,
-        unreadCount: notifications.filter(n => !n.read).length,
-      };
-    });
-  },
+  addNotification: (notification) => set((state) => {
+    const notifications = [notification, ...state.notifications].slice(0, 100);
+    return {
+      notifications,
+      unreadCount: notifications.filter(n => !n.read).length,
+    };
+  }),
+
+  markAsRead: (id) => set((state) => {
+    const notifications = state.notifications.map(n => 
+      n.id === id ? { ...n, read: true } : n
+    );
+    return { notifications, unreadCount: notifications.filter(n => !n.read).length };
+  }),
+
+  clear: () => set({ notifications: [], unreadCount: 0 }),
+
+  removeNotification: (id) => set((state) => {
+    const notifications = state.notifications.filter(n => n.id !== id);
+    return { notifications, unreadCount: notifications.filter(n => !n.read).length };
+  }),
   
-  // Alias for add to maintain backward compatibility
-  addNotification: function(notification: Notification) {
-    return this.add(notification);
-  },
-  
-  createSystemNotification: (config, severity) => {
+  markAllAsRead: () => set((state) => ({
+    notifications: state.notifications.map(n => ({ ...n, read: true })),
+    unreadCount: 0
+  })),
+
+  createSystemNotification: (config, severity = 'info') => {
     const notification: SystemNotification = {
       ...config,
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       timestamp: new Date(),
       read: false,
       category: 'system',
       severity,
       origin: config.origin || 'app',
     };
-    get().add(notification);
+    get().addNotification(notification);
     return notification;
   },
-  
-  createFunctionalNotification: (config, severity) => {
+
+  createFunctionalNotification: (config, severity = 'info') => {
     const notification: FunctionalNotification = {
       ...config,
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       timestamp: new Date(),
       read: false,
       category: 'functional',
       severity,
-      entity: config.entity,
-      operation: config.operation,
+      origin: config.origin || 'app',
     };
-    get().add(notification);
+    get().addNotification(notification);
     return notification;
-  },
-
-  markAsRead: (id: string) => {
-    set((state) => {
-      const notifications = state.notifications.map(notification =>
-        notification.id === id ? { ...notification, read: true } : notification
-      );
-      return {
-        notifications,
-        unreadCount: notifications.filter(n => !n.read).length,
-      };
-    });
-  },
-
-  markAllAsRead: () => {
-    set((state) => ({
-      notifications: state.notifications.map(notification => ({
-        ...notification,
-        read: true,
-      })),
-      unreadCount: 0,
-    }));
-  },
-
-  clear: () => {
-    set({ notifications: [], unreadCount: 0 });
-  },
-
-  remove: (id: string) => {
-    set((state) => {
-      const notifications = state.notifications.filter(n => n.id !== id);
-      return {
-        notifications,
-        unreadCount: notifications.filter(n => !n.read).length,
-      };
-    });
-  },
-
-  getNotifications: () => {
-    return get().notifications;
-  },
-
-  getUnreadCount: () => {
-    return get().unreadCount;
   },
 }));

@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { supabase, Wristband, Event } from '../services/supabase'
+import { supabase, Wristband } from '../services/supabase'
 import {
   QrCode,
   Edit,
@@ -8,7 +8,6 @@ import {
   Download,
   Upload,
   Search,
-  Filter,
 } from 'lucide-react'
 const WristbandsPage = () => {
   const [searchParams] = useSearchParams()

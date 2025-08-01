@@ -1,18 +1,16 @@
-import React from 'react';
 import { Button, Card, CardBody, CardHeader, Container, Row, Col } from 'react-bootstrap';
 import notification from '../utils/notifications';
 
 export default function NotificationTestPage() {
   const testSystemNotification = () => {
     notification.info('This is a system notification', {
-      entity: 'system',
-      operation: 'test',
-      severity: 'info',
-      technicalDetails: 'System notification test',
+      origin: 'test',
       context: { 
+        entity: 'system',
+        operation: 'test',
         test: 'system',
-        origin: 'test',
-        code: 'SYSTEM_NOTIFICATION'
+        code: 'SYSTEM_NOTIFICATION',
+        technicalDetails: 'System notification test'
       },
       toastOptions: {
         autoClose: 3000
@@ -22,12 +20,12 @@ export default function NotificationTestPage() {
 
   const testSuccessNotification = () => {
     notification.success('Operation completed successfully', {
-      entity: 'test',
-      operation: 'create',
-      severity: 'success',
-      technicalDetails: 'Success notification test',
+      origin: 'test',
       context: { 
-        test: 'success' 
+        entity: 'test',
+        operation: 'create',
+        test: 'success',
+        technicalDetails: 'Success notification test'
       },
       toastOptions: {
         autoClose: 3000
@@ -42,13 +40,13 @@ export default function NotificationTestPage() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       notification.error('An error occurred', error, {
-        entity: 'test',
-        operation: 'delete',
-        severity: 'error',
-        technicalDetails: errorMessage,
+        origin: 'test',
         context: { 
+          entity: 'test',
+          operation: 'delete',
           error: error instanceof Error ? error.stack : String(error),
-          test: 'error'
+          test: 'error',
+          technicalDetails: errorMessage
         },
         toastOptions: {
           autoClose: 5000
@@ -59,12 +57,12 @@ export default function NotificationTestPage() {
 
   const testWarningNotification = () => {
     notification.warning('This is a warning', {
-      entity: 'test',
-      operation: 'update',
-      severity: 'warning',
-      technicalDetails: 'Warning notification test',
+      origin: 'test',
       context: { 
-        test: 'warning' 
+        entity: 'test',
+        operation: 'update',
+        test: 'warning',
+        technicalDetails: 'Warning notification test'
       },
       toastOptions: {
         autoClose: 4000
@@ -74,12 +72,12 @@ export default function NotificationTestPage() {
 
   const testFunctionalNotification = () => {
     notification.info('Test item created', {
-      entity: 'test',
-      operation: 'create',
-      severity: 'info',
-      technicalDetails: 'Additional details about the operation',
+      origin: 'test',
       context: { 
+        entity: 'test',
+        operation: 'create',
         test: 'functional',
+        technicalDetails: 'Additional details about the operation',
         data: { id: '123', name: 'Test Item' }
       },
       toastOptions: {
@@ -91,28 +89,36 @@ export default function NotificationTestPage() {
   const testCrudNotifications = () => {
     // CRUD helpers with proper typing
     notification.success('Test item was created', {
-      entity: 'Test Item',
-      operation: 'create',
-      severity: 'success',
-      context: { id: '123' }
+      origin: 'test',
+      context: { 
+        entity: 'Test Item',
+        operation: 'create',
+        id: '123'
+      }
     });
     notification.success('Test item was updated', {
-      entity: 'Test Item',
-      operation: 'update',
-      severity: 'success',
-      context: { id: '123' }
+      origin: 'test',
+      context: { 
+        entity: 'Test Item',
+        operation: 'update',
+        id: '123'
+      }
     });
     notification.success('Test item was deleted', {
-      entity: 'Test Item',
-      operation: 'delete',
-      severity: 'success',
-      context: { id: '123' }
+      origin: 'test',
+      context: { 
+        entity: 'Test Item',
+        operation: 'delete',
+        id: '123'
+      }
     });
     notification.success('Test items were fetched', {
-      entity: 'Test Items',
-      operation: 'read',
-      severity: 'info',
-      context: { count: 5 }
+      origin: 'test',
+      context: { 
+        entity: 'Test Items',
+        operation: 'read',
+        count: 5
+      }
     });
   };
 

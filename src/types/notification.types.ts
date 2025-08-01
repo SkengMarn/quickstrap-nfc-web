@@ -96,13 +96,17 @@ export interface NotificationMethods {
   warning(message: string, options?: Omit<SystemNotificationConfig, 'message' | 'severity'>): SystemNotification;
   info(message: string, options?: Omit<SystemNotificationConfig, 'message' | 'severity'>): SystemNotification;
   critical(message: string, options?: Omit<SystemNotificationConfig, 'message' | 'severity'>): SystemNotification;
-  debug(message: string, options?: Omit<SystemNotificationConfig, 'message' | 'severity'>): SystemNotification;
+  debug(message: string, options?: Omit<SystemNotificationConfig, 'message' | 'severity'>): SystemNotification | null;
 
   // CRUD operations
   created(entity: string, message: string, data?: Record<string, unknown>): FunctionalNotification;
-  read(entity: string, message: string, data?: Record<string, unknown>): FunctionalNotification;
+  read(entity: string, message: string, data?: Record<string, unknown>): FunctionalNotification & { markAsRead: (id: string) => void };
   updated(entity: string, message: string, data?: Record<string, unknown>): FunctionalNotification;
   deleted(entity: string, message: string, data?: Record<string, unknown>): FunctionalNotification;
+  fetched(entity: string, message: string, data?: Record<string, unknown>): FunctionalNotification;
+  
+  // Mark a notification as read
+  markAsRead(id: string): void;
 
   // Operation shortcuts
   operation: {

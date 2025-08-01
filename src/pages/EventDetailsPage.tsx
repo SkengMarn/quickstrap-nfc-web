@@ -1,17 +1,11 @@
-import React, { useEffect, useState } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
-import {
-  supabase,
-  Event,
-  Wristband,
-  CheckinLog,
-  EventAccess,
-} from '../services/supabase'
+import { useEffect, useState } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import { supabase, Event } from '../services/supabase'
 import { Edit, Download, Upload, Users, RefreshCw } from 'lucide-react'
 import LoadingScreen from '../components/common/LoadingScreen'
 const EventDetailsPage = () => {
-  const { id } = useParams()
-  const navigate = useNavigate()
+  const { id } = useParams<{ id: string }>()
+  
   interface EventStats {
     totalWristbands: number;
     checkedIn: number;
@@ -31,7 +25,8 @@ const EventDetailsPage = () => {
   const [accessUsers, setAccessUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
-  const [error, setError] = useState<string | null>(null)
+  // Error state is kept for future error handling
+  const [, setError] = useState<string | null>(null)
   useEffect(() => {
     if (id) {
       fetchEventDetails(id)

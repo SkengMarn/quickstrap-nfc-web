@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase, Event, EventAccess } from '../services/supabase'
+import { supabase } from '../services/supabase'
 import { Users, Edit, Trash2, Search } from 'lucide-react'
 const AccessPage = () => {
   const [accessList, setAccessList] = useState<any[]>([])

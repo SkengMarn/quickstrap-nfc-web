@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import notification from '../utils/notifications';
-import LoadingButton from '../components/common/LoadingButton';
 
 interface UserProfile {
   id: string;
@@ -15,10 +14,10 @@ const SettingsPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'account' | 'password'>('account');
-  const [user, setUser] = useState<UserProfile | null>(null);
+  // User state is managed by formData, but we keep the user reference
+  const [, setUser] = useState<UserProfile | null>(null);
   
-  // Account form state
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  // Form state is managed by formData
   
   const [formData, setFormData] = useState({
     email: '',
@@ -51,10 +50,10 @@ const SettingsPage: React.FC = () => {
         
       if (error) throw error;
       
-      setProfile(data);
+      setUser(data);
       setFormData({
         full_name: data.full_name || '',
-        email: user.email || '',
+        email: data.email || '',
         phone: data.phone || ''
       });
     } catch (error) {
@@ -168,7 +167,7 @@ const SettingsPage: React.FC = () => {
       // First reauthenticate before changing password
       if (passwordData.currentPassword) {
         const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: profile?.email || '',
+          email: formData.email || '',
           password: passwordData.currentPassword
         });
         
@@ -198,16 +197,12 @@ const SettingsPage: React.FC = () => {
         context: {}
       });
     } catch (error) {
-      console.error('Error updating password:', error);
-      const errorMessage = 'Could not update password';
       notification.error('Failed to update password', {
-        operation: 'update',
-        severity: 'error',
-        technicalDetails: error.message,
+        origin: 'settings',
         context: {
-          component: 'SettingsPage',
-          action: 'updatePassword',
-          error: error instanceof Error ? error : new Error(errorMessage)
+          entity: 'user',
+          operation: 'update_password',
+          error: error instanceof Error ? error : new Error(String(error))
         }
       });
     } finally {
@@ -215,7 +210,7 @@ const SettingsPage: React.FC = () => {
     }
   };
 
-  if (loading && !profile) {
+  if (loading && !formData.email) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
