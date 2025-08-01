@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase, Wristband } from '../services/supabase'
+import { WristbandBulkUpload } from '../components/WristbandBulkUpload'
 import {
   QrCode,
   Edit,
@@ -8,6 +9,7 @@ import {
   Download,
   Upload,
   Search,
+  Plus,
 } from 'lucide-react'
 const WristbandsPage = () => {
   const [searchParams] = useSearchParams()
@@ -143,9 +145,34 @@ const WristbandsPage = () => {
       fetchWristbands(selectedEvent, selectedCategory, 1)
     }
   }
+
   const totalPages = Math.ceil(totalCount / pageSize)
+
+  const handleUploadComplete = () => {
+    if (selectedEvent) {
+      fetchWristbands(selectedEvent, selectedCategory, page);
+      fetchCategories(selectedEvent);
+    }
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="container py-4">
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h2>Wristbands</h2>
+        <div className="d-flex gap-2">
+          <Link to={`/wristbands/new${selectedEvent ? `?eventId=${selectedEvent}` : ''}`} className="btn btn-primary">
+            <Plus size={16} className="me-1" /> Add Wristband
+          </Link>
+        </div>
+      </div>
+      
+      {selectedEvent && (
+        <WristbandBulkUpload 
+          eventId={selectedEvent} 
+          onUploadComplete={handleUploadComplete} 
+          className="mb-4"
+        />
+      )}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
         <h1 className="text-2xl font-bold text-gray-900">Wristbands</h1>
         <Link
