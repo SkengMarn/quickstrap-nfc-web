@@ -61,15 +61,16 @@ const SettingsPage: React.FC = () => {
       console.error('Error fetching profile:', error);
       const errorMessage = 'Failed to load profile';
       notification.error(errorMessage, {
-        'data-entity': 'user_profile',
-        'data-operation': 'read',
-        autoClose: 10000,
-        // @ts-ignore - Temporarily ignoring type error for context
+        operation: 'read',
+        severity: 'error',
+        technicalDetails: 'Failed to fetch profile data',
         context: {
-          error: error instanceof Error ? error : new Error('Unknown error fetching profile'),
           component: 'SettingsPage',
           action: 'fetchProfile',
-          technicalDetails: 'Failed to fetch profile data'
+          error: error instanceof Error ? error : new Error('Unknown error fetching profile')
+        },
+        toastOptions: {
+          autoClose: 10000
         }
       });
     } finally {
@@ -124,33 +125,17 @@ const SettingsPage: React.FC = () => {
       
       // Refresh profile data
       await fetchProfile();
-      
-      notification.success('Profile information updated successfully', {
-        'data-entity': 'user_profile',
-        'data-operation': 'update',
-        autoClose: 5000,
-        // @ts-ignore - Temporarily ignoring type error for context
-        context: {
-          component: 'SettingsPage',
-          action: 'updateProfile',
-          technicalDetails: 'Profile data was successfully updated'
-        }
+      // Show success message
+      notification.success('Profile updated successfully', {
+        origin: 'app',
+        context: {}
       });
     } catch (error) {
       console.error('Error updating profile:', error);
       const errorMessage = 'Could not update profile';
-      notification.error(errorMessage, {
-        'data-entity': 'user_profile',
-        'data-operation': 'update',
-        autoClose: 10000,
-        // @ts-ignore - Temporarily ignoring type error for context
-        context: {
-          error: error instanceof Error ? error : new Error('Failed to update profile'),
-          component: 'SettingsPage',
-          action: 'updateProfile',
-          technicalDetails: 'Failed to update profile data',
-          formData: process.env.NODE_ENV === 'development' ? formData : undefined
-        }
+      notification.error(errorMessage, undefined, {
+        origin: 'app',
+        context: {}
       });
     } finally {
       setLoading(false);
@@ -162,15 +147,8 @@ const SettingsPage: React.FC = () => {
     
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       notification.error('New password and confirmation do not match', {
-        'data-entity': 'user_password',
-        'data-operation': 'update',
-        autoClose: 10000,
-        // @ts-ignore - Temporarily ignoring type error for context
-        context: {
-          component: 'SettingsPage',
-          action: 'passwordValidation',
-          technicalDetails: 'Validation failed: Passwords do not match'
-        }
+        origin: 'app',
+        context: {}
       });
       return;
     }
@@ -178,15 +156,8 @@ const SettingsPage: React.FC = () => {
     // Validate password strength
     if (passwordData.newPassword.length < 8) {
       notification.error('Password must be at least 8 characters long', {
-        'data-entity': 'user_password',
-        'data-operation': 'update',
-        autoClose: 10000,
-        // @ts-ignore - Temporarily ignoring type error for context
-        context: {
-          component: 'SettingsPage',
-          action: 'passwordValidation',
-          technicalDetails: 'Validation failed: Password too short'
-        }
+        origin: 'app',
+        context: {}
       });
       return;
     }
@@ -218,17 +189,25 @@ const SettingsPage: React.FC = () => {
         confirmPassword: ''
       });
       
-      notification.updated('password', 'Password updated successfully');
+      // Handle sign out
+      const { error: signOutError } = await supabase.auth.signOut();
+      if (signOutError) throw signOutError;
+      // Show success message
+      notification.success('Successfully signed out', {
+        origin: 'app',
+        context: {}
+      });
     } catch (error) {
       console.error('Error updating password:', error);
       const errorMessage = 'Could not update password';
-      notification.system({
-        message: errorMessage,
-        origin: 'SettingsPage',
+      notification.error('Failed to update password', {
+        operation: 'update',
         severity: 'error',
+        technicalDetails: error.message,
         context: {
-          message: errorMessage,
-          error: error instanceof Error ? error : new Error('Failed to update password')
+          component: 'SettingsPage',
+          action: 'updatePassword',
+          error: error instanceof Error ? error : new Error(errorMessage)
         }
       });
     } finally {

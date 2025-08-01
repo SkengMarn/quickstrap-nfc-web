@@ -1,113 +1,79 @@
 import { create } from 'zustand';
-import type { ToastOptions as ReactToastifyOptions, TypeOptions, ToastPosition, ToastClassName } from 'react-toastify';
+import type { 
+  Notification, 
+  SystemNotification, 
+  FunctionalNotification,
+  SystemNotificationConfig,
+  FunctionalNotificationConfig,
+  Severity
+} from '@/types/notification.types';
 
-export type NotificationSeverity = 'critical' | 'error' | 'warning' | 'info' | 'debug' | 'success';
-
-export type ToastOptions = Omit<ReactToastifyOptions, 'type' | 'position' | 'className'> & {
-  type?: TypeOptions;
-  position?: ToastPosition;
-  'data-entity'?: string;
-  'data-operation'?: string;
-  className?: string | ToastClassName;
-  autoClose?: number | false;
-};
-export type OperationType = 
-  | 'create' 
-  | 'read' 
-  | 'update' 
-  | 'delete' 
-  | 'login' 
-  | 'logout' 
-  | 'register' 
-  | 'password_reset'
-  | 'access_grant'
-  | 'access_revoke'
-  | 'app_start'
-  | 'session_timeout'
-  | 'network_error'
-  | 'config_load'
-  | 'auth_error'
-  | 'notify'
-  | 'info'
-  | 'success';
-
-export type NotificationCategory = 'system' | 'functional';
-
-
-
-export interface BaseNotification {
-  id: string;
-  timestamp: Date;
-  read: boolean;
-  category: 'system' | 'functional';
-  logToConsole?: boolean;
-  showInUI?: boolean;
-  context?: Record<string, unknown>;
-  message: string;
-}
-
-export interface SystemNotification extends BaseNotification {
-  category: 'system';
-  code?: string;
-  origin: string;
-  severity: NotificationSeverity;
-  toastOptions?: ToastOptions;
-}
-
-export interface FunctionalNotification extends BaseNotification {
-  category: 'functional';
-  entity: string;
-  operation: OperationType;
-  severity: NotificationSeverity;
-  technicalDetails?: string;
-  data?: Record<string, unknown>;
-  toastOptions?: ToastOptions;
-}
-
-export type Notification = SystemNotification | FunctionalNotification;
-
-export interface NotificationStore {
+interface NotificationStore {
   notifications: Notification[];
   unreadCount: number;
-  addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void;
+  add: (notification: Notification) => void;
+  addNotification: (notification: Notification) => void; // Alias for add
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
-  clearNotifications: () => void;
-  removeNotification: (id: string) => void;
+  clear: () => void;
+  remove: (id: string) => void;
+  getNotifications: () => Notification[];
+  getUnreadCount: () => number;
+  createSystemNotification: (config: Omit<SystemNotificationConfig, 'severity'>, severity: Severity) => SystemNotification;
+  createFunctionalNotification: (config: Omit<FunctionalNotificationConfig, 'severity'>, severity: Severity) => FunctionalNotification;
 }
 
 const MAX_NOTIFICATIONS = 100; // Prevent memory issues
 
-export const useNotificationStore = create<NotificationStore>((set) => ({
+export const useNotificationStore = create<NotificationStore>((set, get) => ({
   notifications: [],
   unreadCount: 0,
 
-  addNotification: (notification) => {
-    // Create a properly typed notification based on the category
-    const newNotification: Notification = notification.category === 'system'
-      ? {
-          ...notification as Omit<SystemNotification, 'id' | 'timestamp' | 'read'>,
-          id: Date.now().toString(),
-          timestamp: new Date(),
-          read: false,
-        }
-      : {
-          ...notification as Omit<FunctionalNotification, 'id' | 'timestamp' | 'read'>,
-          id: Date.now().toString(),
-          timestamp: new Date(),
-          read: false,
-        };
-
+  add: (notification: Notification) => {
     set((state) => {
-      const notifications = [newNotification, ...state.notifications].slice(0, MAX_NOTIFICATIONS);
+      const notifications = [notification, ...state.notifications].slice(0, MAX_NOTIFICATIONS);
       return {
         notifications,
         unreadCount: notifications.filter(n => !n.read).length,
       };
     });
   },
+  
+  // Alias for add to maintain backward compatibility
+  addNotification: function(notification: Notification) {
+    return this.add(notification);
+  },
+  
+  createSystemNotification: (config, severity) => {
+    const notification: SystemNotification = {
+      ...config,
+      id: Date.now().toString(),
+      timestamp: new Date(),
+      read: false,
+      category: 'system',
+      severity,
+      origin: config.origin || 'app',
+    };
+    get().add(notification);
+    return notification;
+  },
+  
+  createFunctionalNotification: (config, severity) => {
+    const notification: FunctionalNotification = {
+      ...config,
+      id: Date.now().toString(),
+      timestamp: new Date(),
+      read: false,
+      category: 'functional',
+      severity,
+      entity: config.entity,
+      operation: config.operation,
+    };
+    get().add(notification);
+    return notification;
+  },
 
-  markAsRead: (id) => {
+  markAsRead: (id: string) => {
     set((state) => {
       const notifications = state.notifications.map(notification =>
         notification.id === id ? { ...notification, read: true } : notification
@@ -121,16 +87,19 @@ export const useNotificationStore = create<NotificationStore>((set) => ({
 
   markAllAsRead: () => {
     set((state) => ({
-      notifications: state.notifications.map(notification => ({ ...notification, read: true })),
+      notifications: state.notifications.map(notification => ({
+        ...notification,
+        read: true,
+      })),
       unreadCount: 0,
     }));
   },
 
-  clearNotifications: () => {
+  clear: () => {
     set({ notifications: [], unreadCount: 0 });
   },
 
-  removeNotification: (id) => {
+  remove: (id: string) => {
     set((state) => {
       const notifications = state.notifications.filter(n => n.id !== id);
       return {
@@ -138,5 +107,13 @@ export const useNotificationStore = create<NotificationStore>((set) => ({
         unreadCount: notifications.filter(n => !n.read).length,
       };
     });
+  },
+
+  getNotifications: () => {
+    return get().notifications;
+  },
+
+  getUnreadCount: () => {
+    return get().unreadCount;
   },
 }));

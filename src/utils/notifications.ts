@@ -1,445 +1,738 @@
-import { toast, type ToastContent, type TypeOptions } from 'react-toastify';
+// src/utils/notifications.ts
+
+import { toast, type TypeOptions, type ToastContent } from 'react-toastify';
 import { v4 as uuidv4 } from 'uuid';
 import { useNotificationStore } from '@/stores/notificationStore';
 import type {
-  NotificationSeverity,
-  OperationType,
+  Severity,
   SystemNotification,
   FunctionalNotification,
+  Operation,
   ToastOptions,
   NotificationMethods
 } from '@/types/notification.types';
+import { Operations } from '@/types/notification.types';
 
-// Re-export types for convenience
-export type { OperationType, NotificationSeverity as Severity };
-
-// Extend the FunctionalNotification interface to include additional properties
-interface ExtendedFunctionalNotification extends Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category'> {
-  logToConsole?: boolean;
-  showInUI?: boolean;
-  toastOptions?: ToastOptions;
-  origin?: string;
-  [key: string]: unknown;
-}
-
-// Type for toast function
-type ToastFunction = (content: ToastContent, options?: ToastOptions) => void;
-
-// Extend the NotificationMethods interface to include operation method
-interface ExtendedNotificationMethods extends Omit<NotificationMethods, 'operation'> {
-  operation: (
-    operation: OperationType,
-    entity: string,
-    message: string,
-    options?: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'operation' | 'entity' | 'message'> & {
-      severity?: NotificationSeverity;
-    }
-  ) => FunctionalNotification;
-}
+// Get the notification store
+const getNotificationStore = () => useNotificationStore.getState();
 
 // Default toast options
 const defaultToastOptions: ToastOptions = {
+  position: 'top-right',
   autoClose: 5000,
+  hideProgressBar: false,
   closeOnClick: true,
   pauseOnHover: true,
   draggable: true,
-  position: 'top-right',
-  hideProgressBar: false,
+  progress: undefined,
+  pauseOnFocusLoss: true,
   closeButton: true,
-  className: 'toast-notification',
-  type: 'default'
+  theme: 'light',
 };
 
-// Map severity to toast functions with proper typing
-type SeverityKey = NotificationSeverity | 'trace' | 'success';
-
-// Helper type to ensure all severity keys are handled
-type SeverityToToastFn = {
-  [K in SeverityKey]: ToastFunction;
-};
-
-// Helper function to create toast options
-const createToastOptions = (
-  options: ToastOptions | undefined, 
-  type: TypeOptions, 
-  className: string, 
-  autoClose: number | false
-): ToastOptions => {
-  // Create a new options object without className
-  const { className: existingClassName, ...restOptions } = options || {};
-  
-  // If there's an existing className, combine it with the new one
-  if (existingClassName) {
-    if (typeof existingClassName === 'function') {
-      // If className is a function, create a new function that combines both
-      const existingFn = existingClassName as (context: any) => string;
-      return {
-        ...restOptions,
-        type,
-        autoClose,
-        className: (context: any) => {
-          const baseClass = className;
-          const existingClass = existingFn(context);
-          return `${baseClass} ${existingClass || ''}`.trim();
-        },
-      };
-    } else {
-      // If className is a string, combine them
-      return {
-        ...restOptions,
-        type,
-        autoClose,
-        className: `${className} ${existingClassName}`.trim(),
-      };
-    }
-  }
-
-  // If no existing className, just use the new one
-  return {
-    ...restOptions,
-    type,
-    autoClose,
-    className,
-  };
-};
-
-// Create a type-safe severity to toast function map
-const severityToToastFn: SeverityToToastFn = {
-  critical: (content, options) => {
-    toast(content, { ...createToastOptions(options, 'error', 'toast-critical', 10000), type: 'error' });
-  },
-  error: (content, options) => {
-    toast.error(content, createToastOptions(options, 'error', 'toast-error', 8000));
-  },
-  warning: (content, options) => {
-    toast.warning(content, createToastOptions(options, 'warning', 'toast-warning', 6000));
-  },
-  info: (content, options) => {
-    toast.info(content, createToastOptions(options, 'info', 'toast-info', 5000));
-  },
-  debug: (content, options) => {
-    if (process.env.NODE_ENV === 'development') {
-      toast(content, createToastOptions(options, 'info', 'toast-debug', 4000));
-    }
-  },
-  success: (content, options) => {
-    toast.success(content, createToastOptions(options, 'success', 'toast-success', 5000));
-  },
-  trace: ((content: ToastContent, options?: ToastOptions) => {
-    if (process.env.NODE_ENV === 'development') {
-      toast.info(content, createToastOptions(options, 'info', 'toast-trace', 3000));
-    }
-  }) as ToastFunction
-};
-
-// Helper to get the appropriate toast function based on severity
-const getToastFunction = (
-  severity: NotificationSeverity | 'trace' | 'success' = 'info'
-): ToastFunction => {
-  const key = severity.toLowerCase() as keyof typeof severityToToastFn;
-  const toastFn = severityToToastFn[key];
-  
-  if (!toastFn) {
-    console.warn(`No toast function found for severity: ${key}, defaulting to 'info'`);
-    return severityToToastFn.info;
-  }
-  
-  return toastFn;
-};
-
-// Removed unused operation map
-// Map severity to console methods
-const consoleMethods: Record<NotificationSeverity | 'trace' | 'success', (...data: any[]) => void> = {
+// Console methods mapping
+const consoleMethods: Record<Severity, (...data: any[]) => void> = {
   critical: console.error,
   error: console.error,
   warning: console.warn,
-  info: console.log,
+  info: console.info,
+  success: console.log,
   debug: console.debug,
-  success: console.log, // Map success to console.log
-  trace: console.debug, // Map trace to console.debug
 };
 
-// Helper to safely log to console with severity
-const logWithSeverity = (
-  severity: NotificationSeverity, 
-  message: string, 
-  context?: unknown
-): void => {
-  const logMessage = `[${severity.toUpperCase()}] ${message}`;
-  const logFn = consoleMethods[severity] || console.log;
-  logFn(logMessage, context || '');
-};
-
-// Notification utility implementation
-const notificationImpl: ExtendedNotificationMethods = {
-  // System notification method
-  system: (config: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category'>): SystemNotification => {
-    const notification: SystemNotification = {
-      ...config,
-      id: uuidv4(),
-      timestamp: new Date(),
-      read: false,
-      category: 'system',
-      code: config.code || 'SYSTEM_NOTIFICATION',
-      origin: config.origin || 'system',
-      severity: config.severity || 'info',
-      message: config.message || 'System notification',
-      logToConsole: config.logToConsole ?? true,
-      showInUI: config.showInUI ?? true,
-      context: config.context || {},
-      toastOptions: {
-        ...defaultToastOptions,
-        ...(config.toastOptions || {})
-      }
-    };
-
-    // Log to console if enabled
-    if (notification.logToConsole) {
-      logWithSeverity(notification.severity, notification.message, notification.context);
-    }
-
-    // Show in UI if enabled
-    if (notification.showInUI && notification.toastOptions) {
-      const toastFn = getToastFunction(notification.severity);
-      toastFn(notification.message, {
-        ...defaultToastOptions,
-        ...notification.toastOptions,
-        toastId: notification.code || `toast-${Date.now()}`,
-        data: {
-          ...notification.context,
-          entity: 'system',
-          operation: notification.origin
-        }
-      });
-    }
-
-    // Add to store
-    useNotificationStore.getState().addNotification(notification);
-    return notification;
-  },
-
-  // Functional notification method
-  functional: (config: ExtendedFunctionalNotification): FunctionalNotification => {
-    // Create a new config object with all required properties
-    const notificationConfig = {
-      severity: config.severity || 'info',
-      entity: config.entity || 'unknown',
-      operation: config.operation || 'notify',
-      message: config.message || 'No message provided',
-      context: config.context || {},
-      data: config.data || {},
-      logToConsole: config.logToConsole ?? true,
-      showInUI: config.showInUI ?? true,
-      toastOptions: {
-        ...defaultToastOptions,
-        ...(config.toastOptions || {})
-      }
-    };
-    
-    // Create the notification object with all required properties
-    const notification: FunctionalNotification = {
-      ...notificationConfig,
-      id: uuidv4(),
-      timestamp: new Date(),
-      read: false,
-      category: 'functional' as const,
-      severity: notificationConfig.severity || 'info', // Ensure severity is always defined
-    };
-
-    // Log to console if enabled
-    if (notification.logToConsole) {
-      logWithSeverity(
-        notification.severity,
-        `[${notification.operation}] ${notification.entity}: ${notification.message}`,
-        notification.context
-      );
-    }
-
-    // Show in UI if enabled
-    if (notification.showInUI) {
-      const toastFn = getToastFunction(notification.severity);
-      const toastOptions = notification.toastOptions || {};
-      toastFn(notification.message, {
-        ...toastOptions,
-        'data-entity': notification.entity,
-        'data-operation': notification.operation,
-        className: `toast-${notification.severity} ${toastOptions.className || ''}`.trim()
-      });
-    }
-
-    // Add to store
-    useNotificationStore.getState().addNotification(notification);
-    return notification;
-  },
-
-  // Operation helper method (kept for backward compatibility)
-  operation: (
-    operation: OperationType,
-    entity: string,
-    message: string,
-    options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'operation' | 'entity' | 'message'> & {
-      severity?: NotificationSeverity;
-    } = { severity: 'info' }
-  ): FunctionalNotification => {
-    return notificationImpl.functional({
-      operation,
-      entity,
-      message,
-      severity: options.severity || 'info',
-      ...(options as any) // Type assertion to handle spread with Omit
-    });
-  },
-
-  // Alias for info for backward compatibility
-  notify: (message: string, options: ToastOptions = {}) => {
-    return notificationImpl.system({
-      message,
-      severity: 'info',
-      origin: 'app',
-      ...options
-    });
-  },
-
-  // Additional helper methods
-  success: (message: string, options: ToastOptions = {}) => {
-    return notificationImpl.system({
-      message,
-      severity: 'info',
-      origin: 'app',
-      ...options
-    });
-  },
-
-  error: (message: string, error?: unknown, options: ToastOptions = {}) => {
-    return notificationImpl.system({
-      message: error ? `${message}: ${String(error)}` : message,
-      severity: 'error',
-      origin: 'app',
-      ...options
-    });
-  },
-
-  info: (message: string, options: ToastOptions = {}) => {
-    return notificationImpl.system({
-      message,
-      severity: 'info',
-      origin: 'app',
-      ...options
-    });
-  },
-
-  warning: (message: string, options: ToastOptions = {}) => {
-    return notificationImpl.system({
-      message,
-      severity: 'warning',
-      origin: 'app',
-      ...options
-    });
-  },
-
-  // CRUD aliases
-  read: (entity: string, message: string, data: Record<string, unknown> = {}) => {
-    return notificationImpl.fetched(entity, message, data);
-  },
-
-  create: (entity: string, message: string, data: Record<string, unknown> = {}) => {
-    return notificationImpl.created(entity, message, data);
-  },
-
-  update: (entity: string, message: string, data: Record<string, unknown> = {}) => {
-    return notificationImpl.updated(entity, message, data);
-  },
-
-  delete: (entity: string, message: string, data: Record<string, unknown> = {}) => {
-    return notificationImpl.deleted(entity, message, data);
-  },
-
-  login: (message: string, data: Record<string, unknown> = {}) => {
-    return notificationImpl.functional({
-      entity: 'auth',
-      operation: 'login',
-      message,
-      severity: 'info',
-      data
-    });
-  },
-
-  logout: (message: string, data: Record<string, unknown> = {}) => {
-    return notificationImpl.functional({
-      entity: 'auth',
-      operation: 'logout',
-      message,
-      severity: 'info',
-      data
-    });
-  },
-
-  register: (message: string, data: Record<string, unknown> = {}) => {
-    return notificationImpl.functional({
-      entity: 'auth',
-      operation: 'register',
-      message,
-      severity: 'info',
-      data
-    });
-  },
-
-  passwordReset: (message: string, data: Record<string, unknown> = {}) => {
-    return notificationImpl.functional({
-      entity: 'auth',
-      operation: 'password_reset',
-      message,
-      severity: 'info',
-      data
-    });
-  },
-
-  // CRUD operation helpers
-  created: (entity: string, message: string, data: Record<string, unknown> = {}) => {
-    return notificationImpl.functional({
-      entity,
-      message,
-      operation: 'create',
-      severity: 'info', // Changed from 'success' to 'info' to match NotificationSeverity type
-      data,
-      context: { action: 'create', entity, data }
-    });
-  },
-
-  updated: (entity: string, message: string, data: Record<string, unknown> = {}) => {
-    return notificationImpl.functional({
-      entity,
-      message,
-      operation: 'update',
-      severity: 'info',
-      data,
-      context: { action: 'update', entity, data }
-    });
-  },
-
-  deleted: (entity: string, message: string, data: Record<string, unknown> = {}) => {
-    return notificationImpl.functional({
-      entity,
-      message,
-      operation: 'delete',
-      severity: 'warning',
-      data,
-      context: { action: 'delete', entity, data }
-    });
-  },
-
-  fetched: (entity: string, message: string, data: Record<string, unknown> = {}) => {
-    return notificationImpl.functional({
-      entity,
-      message,
-      operation: 'read',
-      severity: 'info',
-      data,
-      context: { action: 'read', entity, data }
-    });
+// Helper for logging with severity
+const logWithSeverity = (severity: Severity, message: string, context?: unknown) => {
+  const logFn = consoleMethods[severity] || console.info;
+  if (typeof logFn === 'function') {
+    logFn(`[${severity.toUpperCase()}] ${message}`, context || '');
   }
 };
 
-// Export the notification object with proper typing
-export const notification: NotificationMethods = notificationImpl;
+// Map of toast methods by severity
+const toastMethods = {
+  info: toast.info,
+  success: toast.success,
+  warning: toast.warn,
+  error: toast.error,
+  critical: toast.error, // Use error style for critical
+  debug: (content: ToastContent, options?: any) => {
+    // For debug, log to console and optionally show in UI
+    console.debug('[DEBUG]', content);
+    if (options?.showInUI !== false) {
+      toast(content, { ...options, type: 'default' });
+    }
+  },
+} as const;
+
+// Get toast function for severity
+const getToastFn = (severity: Severity) => toastMethods[severity] || toast.info;
+
+// Map our Severity to react-toastify's TypeOptions
+function mapSeverityToType(severity: Severity): TypeOptions {
+  const typeMap: Record<Severity, TypeOptions> = {
+    critical: 'error',
+    error: 'error',
+    warning: 'warning',
+    info: 'info',
+    success: 'success',
+    debug: 'default'
+  };
+  return typeMap[severity] || 'default';
+}
+
+// Create a system notification
+const createSystemNotification = (
+  config: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'severity' | 'category'> & { 
+    severity?: Severity;
+    origin?: string;
+  },
+  severity: Severity = 'info'
+): SystemNotification => {
+  const finalSeverity = config.severity || severity;
+  
+  const notification: SystemNotification = {
+    id: uuidv4(),
+    timestamp: new Date(),
+    read: false,
+    category: 'system',
+    ...config,
+    severity: finalSeverity,
+    toastOptions: {
+      ...defaultToastOptions,
+      ...config.toastOptions,
+      type: mapSeverityToType(finalSeverity),
+      'data-notification-type': 'system',
+    },
+  };
+
+  // Add to store
+  const store = getNotificationStore();
+  if (store.add) {
+    store.add(notification);
+  } else if (store.addNotification) {
+    store.addNotification(notification);
+  }
+
+  // Log to console if enabled
+  if (notification.logToConsole) {
+    logWithSeverity(notification.severity, notification.message, notification.context);
+  }
+
+  // Show toast if enabled
+  if (notification.showInUI) {
+    const toastFn = getToastFn(notification.severity);
+    toastFn(notification.message, notification.toastOptions);
+  }
+
+  return notification;
+};
+
+// Create a functional notification
+const createFunctionalNotification = (
+  config: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'severity' | 'category'> & { 
+    severity?: Severity;
+    entity: string;
+    operation: Operation;
+    origin?: string;
+  },
+  severity: Severity = 'info'
+): FunctionalNotification => {
+  const finalSeverity = config.severity || severity;
+  
+  const notification: FunctionalNotification = {
+    id: uuidv4(),
+    timestamp: new Date(),
+    read: false,
+    category: 'functional',
+    ...config,
+    severity: finalSeverity,
+    message: config.message,
+    entity: config.entity,
+    operation: config.operation,
+    data: config.data,
+    origin: config.origin || 'app',
+    logToConsole: config.logToConsole ?? true,
+    showInUI: config.showInUI ?? true,
+    toastOptions: {
+      ...defaultToastOptions,
+      ...config.toastOptions,
+      type: mapSeverityToType(finalSeverity),
+      'data-notification-type': 'functional',
+      'data-entity': config.entity,
+      'data-operation': config.operation,
+    },
+  };
+
+  // Add to store
+  const store = getNotificationStore();
+  if (store.add) {
+    store.add(notification);
+  } else if (store.addNotification) {
+    store.addNotification(notification);
+  }
+
+  // Log to console if enabled
+  if (notification.logToConsole) {
+    logWithSeverity(
+      notification.severity,
+      `[${notification.operation}] ${notification.entity}: ${notification.message}`,
+      {
+        technicalDetails: notification.technicalDetails,
+        data: notification.data,
+      }
+    );
+  }
+
+  // Show toast if enabled
+  if (notification.showInUI) {
+    const toastFn = getToastFn(notification.severity);
+    toastFn(`${notification.entity}: ${notification.message}`, notification.toastOptions);
+  }
+
+  return notification;
+};
+
+// Operation-specific creators
+const createOperationNotification = (
+  operation: Operation,
+  entity: string,
+  message: string,
+  options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'entity' | 'operation' | 'message' | 'severity'> & { severity?: Severity } = {}
+): FunctionalNotification => {
+  // Default severity based on operation type
+  const defaultSeverity: Record<Operation, Severity> = {
+    create: 'success',
+    read: 'info',
+    update: 'warning',
+    delete: 'error',
+    sync: 'info',
+    validate: 'info',
+    process: 'info',
+    login: 'info',
+    logout: 'info',
+    register: 'success',
+    password_reset: 'info',
+    access_grant: 'success',
+    access_revoke: 'warning',
+    email_verification: 'info',
+    status_change: 'info'
+  };
+
+  return createFunctionalNotification(
+    {
+      ...options,
+      entity,
+      operation,
+      message,
+      severity: options.severity || defaultSeverity[operation] || 'info',
+      origin: 'origin' in options ? options.origin : 'app',
+    },
+    options.severity || defaultSeverity[operation] || 'info'
+  );
+}
+// Create notification methods object
+const notification: NotificationMethods = {
+  // System notifications
+  system: (config) => {
+    // Ensure required properties are provided
+    if (!config.message) {
+      throw new Error('System notification requires a message');
+    }
+    
+    return createSystemNotification({
+      ...config,
+      severity: config.severity || 'info',
+      origin: 'origin' in config ? config.origin : 'app',
+    });
+  },
+
+  // Functional notifications
+  functional: (config) => {
+    // Ensure required properties are provided
+    if (!config.entity || !config.operation || !config.message) {
+      throw new Error('Functional notification requires entity, operation, and message');
+    }
+    
+    return createFunctionalNotification({
+      ...config,
+      severity: config.severity || 'info',
+      origin: 'origin' in config ? config.origin : 'app',
+    });
+  },
+
+  // Severity-based shortcuts
+  success: (message, options = { origin: 'app' }) => {
+    return createSystemNotification({
+      ...options,
+      message,
+      severity: 'success',
+      origin: 'origin' in options ? options.origin : 'app',
+    });
+  },
+
+  error: (message, error, options = { origin: 'app' }) => {
+    const errorMessage = error instanceof Error ? error.message : String(error || message);
+    return createSystemNotification({
+      ...options,
+      message: errorMessage,
+      severity: 'error',
+      origin: 'origin' in options ? options.origin : 'app',
+    });
+  },
+
+  warning: (message, options = { origin: 'app' }) => {
+    return createSystemNotification({
+      ...options,
+      message,
+      severity: 'warning',
+      origin: 'origin' in options ? options.origin : 'app',
+    });
+  },
+
+  info: (message, options = { origin: 'app' }) => {
+    return createSystemNotification({
+      ...options,
+      message,
+      severity: 'info',
+      origin: 'origin' in options ? options.origin : 'app',
+    });
+  },
+
+  critical: (message, options = { origin: 'app' }) => {
+    return createSystemNotification({
+      ...options,
+      message,
+      severity: 'critical',
+      origin: 'origin' in options ? options.origin : 'app',
+    });
+  },
+
+  debug: (message, options = { origin: 'app' }) => {
+    // Log to console for debug messages
+    console.debug('[DEBUG]', message);
+    
+    return createSystemNotification({
+      ...options,
+      message,
+      severity: 'debug',
+      origin: 'origin' in options ? options.origin : 'app',
+    });
+  },
+
+  // Operation shortcuts
+  operation: {
+    create: (entity, message, options = {}) => 
+      createOperationNotification('create', entity, message, options),
+      
+    read: (entity, message, options = {}) => 
+      createOperationNotification('read', entity, message, options),
+      
+    update: (entity, message, options = {}) => 
+      createOperationNotification('update', entity, message, options),
+      
+    delete: (entity, message, options = {}) => 
+      createOperationNotification('delete', entity, message, options),
+      
+    sync: (entity, message, options = {}) => 
+      createOperationNotification('sync', entity, message, options),
+      
+    validate: (entity, message, options = {}) => 
+      createOperationNotification('validate', entity, message, options),
+      
+    process: (entity, message, options = {}) => 
+      createOperationNotification('process', entity, message, options),
+  },
+
+  // CRUD shortcuts
+  created: (entity, message, data) => 
+    createFunctionalNotification({
+      entity,
+      operation: 'create',
+      message,
+      data,
+      severity: 'success',
+      origin: 'app',
+    }),
+
+  updated: (entity, message, data) => 
+    createFunctionalNotification({
+      entity,
+      operation: 'update',
+      message,
+      data,
+      severity: 'info',
+      origin: 'app',
+    }),
+
+  deleted: (entity, message, data) => 
+    createFunctionalNotification({
+      entity,
+      operation: 'delete',
+      message,
+      data,
+      severity: 'warning',
+      origin: 'app',
+    }),
+
+  fetched: (entity, message, data) => 
+    createFunctionalNotification({
+      entity,
+      operation: 'read',
+      message,
+      data,
+      severity: 'info',
+      origin: 'app',
+    }),
+
+  // Functional notifications
+  functional: (config: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category'>) => {
+    // Ensure required properties are provided
+    if (!config.entity || !config.operation || !config.message) {
+      throw new Error('Functional notification requires entity, operation, and message');
+    }
+    
+    return createFunctionalNotification({
+      ...config,
+      severity: config.severity || 'info',
+      origin: 'origin' in config ? config.origin : 'app',
+    });
+  },
+
+  // Severity-based shortcuts
+  success: (message: string, options: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category' | 'message' | 'severity'> = { origin: 'app' }) => {
+    return createSystemNotification({
+      ...options,
+      message,
+      severity: 'success',
+      origin: 'origin' in options ? options.origin : 'app',
+    });
+  },
+
+  error: (message: string, error?: unknown, options: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category' | 'message' | 'severity'> = { origin: 'app' }) => {
+    const errorMessage = error instanceof Error ? error.message : String(error || message);
+    return createSystemNotification({
+      ...options,
+      message: errorMessage,
+      severity: 'error',
+      context: {
+        ...('context' in options ? options.context : {}),
+        error: error instanceof Error ? error : new Error(errorMessage),
+      },
+    });
+  },
+
+  warning: (message: string, options: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category' | 'message' | 'severity'> = { origin: 'app' }) => {
+    return createSystemNotification({
+      ...options,
+      message,
+      severity: 'warning',
+    });
+  },
+
+  info: (message: string, options: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category' | 'message' | 'severity'> = { origin: 'app' }) => {
+    return createSystemNotification({
+      ...options,
+      message,
+      severity: 'info',
+    });
+  },
+
+  critical: (message: string, options: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category' | 'message' | 'severity'> = { origin: 'app' }) => {
+    return createSystemNotification({
+      ...options,
+      message,
+      severity: 'critical',
+    });
+  },
+
+  debug: (message: string, options: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category' | 'message' | 'severity'> = { origin: 'app' }) => {
+    return createSystemNotification({
+      ...options,
+      message,
+      severity: 'debug',
+    });
+  },
+    
+  // Operation shortcuts
+  operation: {
+    create: (entity: string, message: string, options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'entity' | 'operation' | 'message' | 'severity'> = {}) => {
+      return createOperationNotification('create', entity, message, options);
+    },
+    read: (entity: string, message: string, options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'entity' | 'operation' | 'message' | 'severity'> = {}) => {
+      return createOperationNotification('read', entity, message, options);
+    },
+    update: (entity: string, message: string, options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'entity' | 'operation' | 'message' | 'severity'> = {}) => {
+      return createOperationNotification('update', entity, message, options);
+    },
+    delete: (entity: string, message: string, options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'entity' | 'operation' | 'message' | 'severity'> = {}) => {
+      return createOperationNotification('delete', entity, message, options);
+    },
+    sync: (entity: string, message: string, options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'entity' | 'operation' | 'message' | 'severity'> = {}) => {
+      return createOperationNotification('sync', entity, message, options);
+    },
+    validate: (entity: string, message: string, options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'entity' | 'operation' | 'message' | 'severity'> = {}) => {
+      return createOperationNotification('validate', entity, message, options);
+    },
+    process: (entity: string, message: string, options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'entity' | 'operation' | 'message' | 'severity'> = {}) => {
+      return createOperationNotification('process', entity, message, options);
+    },
+  }
+    // Ensure required properties are provided
+    if (!config.message) {
+      throw new Error('System notification requires a message');
+    }
+    
+    return createSystemNotification({
+      category: 'system',
+      origin: config.origin || 'app',
+      message: config.message,
+      code: config.code,
+      context: config.context,
+      logToConsole: config.logToConsole,
+      showInUI: config.showInUI,
+      toastOptions: config.toastOptions,
+      severity: config.severity
+    }, config.severity || 'info');
+  },
+  
+  functional: (config) => {
+    // Ensure required properties are provided
+    if (!config.entity || !config.operation || !config.message) {
+      throw new Error('Functional notification requires entity, operation, and message');
+    }
+    
+    return createFunctionalNotification({
+      category: 'functional',
+      entity: config.entity,
+      operation: config.operation,
+      message: config.message,
+      technicalDetails: config.technicalDetails,
+      data: config.data,
+      logToConsole: config.logToConsole,
+      showInUI: config.showInUI,
+      toastOptions: config.toastOptions,
+      severity: config.severity
+    }, config.severity || 'info');
+  },
+
+  // Severity-based shortcuts
+  info: (message: string, options: Omit<SystemNotificationConfig, 'message' | 'severity' | 'category'> = {}) =>
+    createSystemNotification({
+      ...options,
+      message,
+      logToConsole: true,
+      showInUI: true,
+      origin: 'app' as const
+    }, 'info'),
+    
+  success: (message: string, options: Omit<SystemNotificationConfig, 'message' | 'severity' | 'category'> = {}) =>
+    createSystemNotification({
+      ...options,
+      message,
+      logToConsole: true,
+      showInUI: true,
+      origin: 'app' as const
+    }, 'success'),
+    
+  warning: (message: string, options: Omit<SystemNotificationConfig, 'message' | 'severity' | 'category'> = {}) =>
+    createSystemNotification({
+      ...options,
+      message,
+      logToConsole: true,
+      showInUI: true,
+      origin: 'app' as const
+    }, 'warning'),
+    
+  error: (message: string, options: Omit<SystemNotificationConfig, 'message' | 'severity' | 'category'> = {}) =>
+    createSystemNotification({
+      ...options,
+      message,
+      logToConsole: true,
+      showInUI: true,
+      origin: 'app' as const
+    }, 'error'),
+    
+  critical: (message: string, options: Omit<SystemNotificationConfig, 'message' | 'severity' | 'category'> = {}) =>
+    createSystemNotification({
+      ...options,
+      message,
+      logToConsole: true,
+      showInUI: true,
+      origin: 'app' as const
+    }, 'critical'),
+    
+  debug: (message: string, options: Omit<SystemNotificationConfig, 'message' | 'severity' | 'category'> = {}) =>
+    createSystemNotification({
+      ...options,
+      message,
+      logToConsole: true,
+      showInUI: false,
+      origin: 'app' as const
+    }, 'debug'),
+  
+  // Operation shortcuts
+  operation: {
+    create: (entity: string, message: string, options: Omit<FunctionalNotificationConfig, 'message' | 'entity' | 'operation' | 'severity'> = {}) =>
+      createFunctionalNotification({ 
+        ...options, 
+        entity, 
+        operation: Operations.CREATE, 
+        message, 
+        severity: 'success' as const
+      }, 'success'),
+      
+    read: (entity: string, message: string, options: Omit<FunctionalNotificationConfig, 'message' | 'entity' | 'operation' | 'severity'> = {}) =>
+      createFunctionalNotification({ 
+        ...options, 
+        entity, 
+        operation: Operations.READ, 
+        message, 
+        severity: 'info' as const
+      }, 'info'),
+      
+    update: (entity: string, message: string, options: Omit<FunctionalNotificationConfig, 'message' | 'entity' | 'operation' | 'severity'> = {}) =>
+      createFunctionalNotification({ 
+        ...options, 
+        entity, 
+        operation: Operations.UPDATE, 
+        message, 
+        severity: 'success' as const
+      }, 'success'),
+      
+    delete: (entity: string, message: string, options: Omit<FunctionalNotificationConfig, 'message' | 'entity' | 'operation' | 'severity'> = {}) =>
+      createFunctionalNotification({ 
+        ...options, 
+        entity, 
+        operation: Operations.DELETE, 
+        message, 
+        severity: 'warning' as const
+      }, 'warning'),
+      
+    sync: (entity: string, message: string, options: Omit<FunctionalNotificationConfig, 'message' | 'entity' | 'operation' | 'severity'> = {}) =>
+      createFunctionalNotification({ 
+        ...options, 
+        entity, 
+        operation: Operations.SYNC, 
+        message, 
+        severity: 'info' as const
+      }, 'info'),
+      
+    validate: (entity: string, message: string, options: Omit<FunctionalNotificationConfig, 'message' | 'entity' | 'operation' | 'severity'> = {}) =>
+      createFunctionalNotification({ 
+        ...options, 
+        entity, 
+        operation: Operations.VALIDATE, 
+        message, 
+        severity: 'info' as const
+      }, 'info'),
+      
+    process: (entity: string, message: string, options: Omit<FunctionalNotificationConfig, 'message' | 'entity' | 'operation' | 'severity'> = {}) =>
+      createFunctionalNotification({ 
+        ...options, 
+        entity, 
+        operation: Operations.PROCESS, 
+        message, 
+        severity: 'info' as const
+      }, 'info'),
+  }
+
+return createFunctionalNotification({
+...config,
+severity: 'severity' in config ? config.severity : 'info',
+});
+},
+
+// Severity-based shortcuts
+success: (message: string, options: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category' | 'message' | 'severity'> = { origin: 'app' }) => {
+return createSystemNotification({
+...options,
+message,
+severity: 'success',
+});
+},
+
+error: (message: string, error?: unknown, options: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category' | 'message' | 'severity'> = { origin: 'app' }) => {
+const errorMessage = error instanceof Error ? error.message : String(error || message);
+return createSystemNotification({
+...options,
+message: errorMessage,
+severity: 'error',
+context: {
+...('context' in options ? options.context : {}),
+error: error instanceof Error ? error : new Error(errorMessage),
+},
+});
+},
+
+warning: (message: string, options: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category' | 'message' | 'severity'> = { origin: 'app' }) => {
+return createSystemNotification({
+...options,
+message,
+severity: 'warning',
+});
+},
+
+info: (message: string, options: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category' | 'message' | 'severity'> = { origin: 'app' }) => {
+return createSystemNotification({
+...options,
+message,
+severity: 'info',
+});
+},
+
+critical: (message: string, options: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category' | 'message' | 'severity'> = { origin: 'app' }) => {
+return createSystemNotification({
+...options,
+message,
+severity: 'critical',
+});
+},
+
+debug: (message: string, options: Omit<SystemNotification, 'id' | 'timestamp' | 'read' | 'category' | 'message' | 'severity'> = { origin: 'app' }) => {
+return createSystemNotification({
+...options,
+message,
+severity: 'debug',
+});
+},
+
+// Operation shortcuts
+operation: {
+create: (entity: string, message: string, options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'entity' | 'operation' | 'message' | 'severity'> = {}) => {
+return createOperationNotification('create', entity, message, options);
+},
+read: (entity: string, message: string, options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'entity' | 'operation' | 'message' | 'severity'> = {}) => {
+return createOperationNotification('read', entity, message, options);
+},
+update: (entity: string, message: string, options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'entity' | 'operation' | 'message' | 'severity'> = {}) => {
+return createOperationNotification('update', entity, message, options);
+},
+delete: (entity: string, message: string, options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'entity' | 'operation' | 'message' | 'severity'> = {}) => {
+return createOperationNotification('delete', entity, message, options);
+},
+sync: (entity: string, message: string, options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'entity' | 'operation' | 'message' | 'severity'> = {}) => {
+return createOperationNotification('sync', entity, message, options);
+},
+validate: (entity: string, message: string, options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'entity' | 'operation' | 'message' | 'severity'> = {}) => {
+return createOperationNotification('validate', entity, message, options);
+},
+process: (entity: string, message: string, options: Omit<FunctionalNotification, 'id' | 'timestamp' | 'read' | 'category' | 'entity' | 'operation' | 'message' | 'severity'> = {}) => {
+return createOperationNotification('process', entity, message, options);
+},
+},
+};
+
+// Export the notification object as the default export
 export default notification;
+
+// Re-export types for convenience
+export type {
+  Severity,
+  SystemNotification,
+  FunctionalNotification,
+  Operation,
+  SystemNotificationConfig,
+  FunctionalNotificationConfig,
+  ToastOptions,
+  NotificationMethods
+} from '@/types/notification.types';

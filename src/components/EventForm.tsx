@@ -67,42 +67,51 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
     
     // Validate required fields with notifications
     if (!formData.name) {
-      notification.error('Please provide a name for the event', {
-        'data-entity': 'event',
-        'data-operation': 'create',
-        autoClose: 5000,
+      notification.error('Please provide a name for the event', undefined, {
+        entity: 'event',
+        operation: 'create',
+        severity: 'error',
+        technicalDetails: 'Validation failed: Event name is required',
         context: {
           validation: 'required_field',
-          field: 'name',
-          technicalDetails: 'Validation failed: Event name is required'
+          field: 'name'
+        },
+        toastOptions: {
+          autoClose: 5000
         }
       });
       return;
     }
 
     if (!formData.start_date) {
-      notification.error('Please select a start date for the event', {
-        'data-entity': 'event',
-        'data-operation': 'create',
-        autoClose: 5000,
+      notification.error('Please select a start date for the event', undefined, {
+        entity: 'event',
+        operation: 'create',
+        severity: 'error',
+        technicalDetails: 'Validation failed: Start date is required',
         context: {
           validation: 'required_field',
-          field: 'start_date',
-          technicalDetails: 'Validation failed: Start date is required'
+          field: 'start_date'
+        },
+        toastOptions: {
+          autoClose: 5000
         }
       });
       return;
     }
 
     if (!formData.end_date) {
-      notification.error('Please select an end date for the event', {
-        'data-entity': 'event',
-        'data-operation': 'create',
-        autoClose: 5000,
+      notification.error('Please select an end date for the event', undefined, {
+        entity: 'event',
+        operation: 'create',
+        severity: 'error',
+        technicalDetails: 'Validation failed: End date is required',
         context: {
           validation: 'required_field',
-          field: 'end_date',
-          technicalDetails: 'Validation failed: End date is required'
+          field: 'end_date'
+        },
+        toastOptions: {
+          autoClose: 5000
         }
       });
       return;
@@ -113,23 +122,22 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
     const endDate = new Date(formData.end_date);
     
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      notification.error('Please enter valid dates in the correct format', {
-        'data-entity': 'event',
-        'data-operation': 'create',
-        autoClose: 5000,
-        context: {
-          technicalDetails: 'Validation failed: Invalid date format'
+      notification.error('Please enter valid dates in the correct format', undefined, {
+        entity: 'event',
+        operation: 'create',
+        severity: 'error',
+        technicalDetails: 'Validation failed: Invalid date format',
+        toastOptions: {
+          autoClose: 5000
         }
       });
       return;
     }
     
     if (endDate <= startDate) {
-      notification.functional({
+      notification.error('End date must be after the start date', {
         entity: 'event',
         operation: 'create',
-        message: 'End date must be after the start date',
-        severity: 'error',
         technicalDetails: 'Validation failed: Invalid date range',
         showInUI: true,
         logToConsole: true
@@ -169,13 +177,15 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
       if (data && data.length > 0) {
         if (isEdit) {
           notification.success(`Event "${formData.name}" updated successfully`, {
-            'data-entity': 'event',
-            'data-operation': 'update'
+            entity: 'event',
+            operation: 'update',
+            severity: 'success'
           });
         } else {
           notification.success(`Event "${formData.name}" created successfully`, {
-            'data-entity': 'event',
-            'data-operation': 'create'
+            entity: 'event',
+            operation: 'create',
+            severity: 'success'
           });
         }
         // Add a small delay to ensure the notification is visible before navigating

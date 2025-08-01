@@ -4,18 +4,18 @@
     "useDefineForClassFields": true,
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "allowJs": false,
-    "skipLibCheck": false,  // Changed to false to catch more type issues
-    "esModuleInterop": false,
+    "skipLibCheck": false,  // Enable lib check but use exclude for problematic types
+    "esModuleInterop": true,  // Changed to true for better compatibility with CJS modules
     "allowSyntheticDefaultImports": true,
     "strict": true,
-    "noImplicitAny": true,  // Added to catch implicit any types
-    "strictNullChecks": true,  // Explicitly enabled for better null checking
-    "strictFunctionTypes": true,  // Added for better function type checking
-    "strictBindCallApply": true,  // Added for better function type checking
-    "noUnusedLocals": true,  // Added to catch unused variables
-    "noUnusedParameters": true,  // Added to catch unused parameters
-    "noImplicitReturns": true,  // Added to ensure all code paths return a value
-    "noFallthroughCasesInSwitch": true,  // Added to catch missing breaks in switch
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -25,7 +25,8 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@/types/*": ["./src/types/*"]
     },
     "typeRoots": [
       "./node_modules/@types",
@@ -33,15 +34,19 @@
     ]
   },
   "include": [
-    "src",
-    "**/*.ts",
-    "**/*.tsx"
+    "src"
   ],
   "exclude": [
     "node_modules",
+    "node_modules/@types/react-toastify/node_modules",
+    "**/node_modules/@types/react-toastify/node_modules",
     "dist",
     "build",
     "**/node_modules/*",
     "**/dist/*"
+  ],
+  "references": [
+    { "path": "./node_modules/react-scripts/config/tsconfig.app.json" },
+    { "path": "./node_modules/react-scripts/config/tsconfig.node.json" }
   ]
 }

@@ -27,16 +27,16 @@ const EventsPage = () => {
       setEvents(data || []);
     } catch (error) {
       console.error('Error fetching events:', error);
-      notification.error('Could not load events', {
-        'data-entity': 'events',
-        'data-operation': 'read',
-        autoClose: 10000,
-        // Move technical details to the message for now to avoid type issues
-        // We can enhance the notification system later to better handle context
-        // @ts-ignore - Temporarily ignoring type error for context
+      notification.error('Could not load events', error, {
+        entity: 'events',
+        operation: 'read',
+        severity: 'error',
+        technicalDetails: error instanceof Error ? error.message : 'Failed to fetch events',
         context: {
-          error: error instanceof Error ? error : new Error('Failed to fetch events'),
-          technicalDetails: error instanceof Error ? error.message : 'Failed to fetch events'
+          error: error instanceof Error ? error : new Error('Failed to fetch events')
+        },
+        toastOptions: {
+          autoClose: 10000
         }
       });
     } finally {
@@ -58,14 +58,16 @@ const EventsPage = () => {
     try {
       // Show warning about related data deletion
       notification.warning(`Deleting "${eventToDelete.name}" and all its related data...`, {
-        'data-entity': 'event',
-        'data-operation': 'delete',
-        autoClose: 3000,
-        // @ts-ignore - Temporarily ignoring type error for context
+        entity: 'event',
+        operation: 'delete',
+        severity: 'warning',
+        technicalDetails: 'Initiating deletion of event and all related data',
         context: {
           eventId: id,
-          eventName: eventToDelete.name,
-          technicalDetails: 'Initiating deletion of event and all related data'
+          eventName: eventToDelete.name
+        },
+        toastOptions: {
+          autoClose: 3000
         }
       });
 
@@ -94,29 +96,36 @@ const EventsPage = () => {
         `Event "${eventToDelete.name}" was successfully deleted.\n` +
         'Note: This action cannot be undone. All related data has been removed.',
         {
-          'data-entity': 'event',
-          'data-operation': 'delete',
-          autoClose: 8000,
-          // @ts-ignore - Temporarily ignoring type error for context
+          entity: 'event',
+          operation: 'delete',
+          severity: 'success',
+          technicalDetails: 'Event and all related data have been permanently removed',
           context: {
             eventId: id,
-            eventName: eventToDelete.name,
-            technicalDetails: 'Event and all related data have been permanently removed'
-        }
+            eventName: eventToDelete.name
+          },
+          toastOptions: {
+            autoClose: 8000
+          }
       });
       
     } catch (error) {
-      notification.functional({
-        entity: 'Event',
-        operation: 'delete',
-        message: `Failed to delete event "${eventToDelete?.name || 'Unknown'}". Please try again.`,
-        severity: 'error',
-        toastOptions: { autoClose: 10000 },
-        context: {
-          eventId: id,
-          eventName: eventToDelete?.name,
-          error: error instanceof Error ? error : new Error(String(error))
-        }
+      notification.error(
+        `Failed to delete event "${eventToDelete?.name || 'Unknown'}". Please try again.`,
+        error,
+        {
+          entity: 'event',
+          operation: 'delete',
+          severity: 'error',
+          technicalDetails: error instanceof Error ? error.message : 'Failed to delete event',
+          context: {
+            eventId: id,
+            eventName: eventToDelete?.name,
+            error: error instanceof Error ? error : new Error(String(error))
+          },
+          toastOptions: { 
+            autoClose: 10000 
+          }
       });
     } finally {
       setDeletingId(null);
