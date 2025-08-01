@@ -1,42 +1,45 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import * as path from 'path';
 
 export default defineConfig({
   plugins: [react()],
-  // Set the public directory
   publicDir: 'public',
   server: {
     port: 3000,
     open: true,
     cors: true,
-    // Enable SPA fallback
+    strictPort: true,
     fs: {
       strict: false
-    },
-    // Handle 404s by serving index.html for all routes
-    // This is handled by the Vite SPA plugin
-    // No need for proxy in this case
+    }
   },
-  // Configure the root directory for the dev server
-  root: './',
-  // Resolve path aliases
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src')
     }
   },
-  // Build configuration
   build: {
     outDir: 'dist',
     sourcemap: true,
-    // Specify the root HTML file
+    emptyOutDir: true,
     rollupOptions: {
-      input: path.resolve(__dirname, 'public/index.html'),
+      input: path.resolve(__dirname, 'index.html'),
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+        },
+      },
     },
+    chunkSizeWarningLimit: 1000,
   },
   define: {
     'process.env': {}
   },
-  base: '/'
-})
+  base: '/',
+  preview: {
+    port: 3000,
+    strictPort: true,
+  },
+  envPrefix: 'VITE_',
+});

@@ -4,6 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Event Admin Portal</title>
+    <!-- Preload critical assets -->
+    <link rel="preload" as="style" href="/assets/index.css" />
+    <link rel="stylesheet" href="/assets/index.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Load environment variables before the app -->
     <script type="module">
       // Environment variables will be injected by Vite during build
       window.ENV = {
@@ -11,9 +18,7 @@
         REACT_APP_SUPABASE_ANON_KEY: import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY
       };
     </script>
-  </head>
-  <body>
-    <div id="root"></div>
+    <!-- Load the app -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
