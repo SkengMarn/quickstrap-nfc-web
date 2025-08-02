@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { supabase, EventWithStats } from '../services/supabase'
-import { CalendarPlus, Users, Activity } from 'lucide-react'
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { supabase, EventWithStats } from '../services/supabase';
+import { CalendarPlus, Users, Plus, Clock } from 'lucide-react';
+import { EventMetrics } from '../components/EventMetrics';
 const Dashboard = () => {
   const [stats, setStats] = useState({
     totalEvents: 0,
@@ -84,72 +85,68 @@ const Dashboard = () => {
     }
     fetchDashboardData()
   }, [])
-  interface StatCardProps {
-    title: string;
-    value: string | number;
-    icon: React.ReactNode;
-    color: string;
-  }
 
-  const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color }) => (
-    <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-      <div className="flex items-center">
-        <div className={`p-3 rounded-lg ${color}`}>{icon}</div>
-        <div className="ml-5">
-          <h3 className="text-gray-500 text-sm font-medium">{title}</h3>
-          <div className="mt-1 text-3xl font-semibold text-gray-900">
-            {value}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <Link
-          to="/events/new"
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-        >
-          <CalendarPlus size={16} className="mr-2" />
-          New Event
-        </Link>
+    <div className="container mx-auto px-4 py-8">
+      {/* Header with Quick Actions */}
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6">
+        <div className="mb-4 md:mb-0">
+          <h1 className="text-3xl font-bold text-gray-900">Event Dashboard</h1>
+          <p className="mt-1 text-sm text-gray-500">Overview of your events and check-ins</p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <Link
+            to="/events/new"
+            className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New Event
+          </Link>
+          <Link
+            to="/wristbands"
+            className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <Users className="h-4 w-4 mr-2" />
+            Manage Wristbands
+          </Link>
+        </div>
       </div>
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 animate-pulse">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-32 bg-gray-200 rounded-xl"></div>
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard
-            title="Total Events"
-            value={stats.totalEvents}
-            icon={<CalendarPlus size={24} className="text-blue-600" />}
-            color="bg-blue-50"
-          />
-          <StatCard
-            title="Active Events"
-            value={stats.activeEvents}
-            icon={<Activity size={24} className="text-green-600" />}
-            color="bg-green-50"
-          />
-          <StatCard
-            title="Total Wristbands"
-            value={stats.totalWristbands}
-            icon={<Users size={24} className="text-purple-600" />}
-            color="bg-purple-50"
-          />
-          <StatCard
-            title="Total Check-ins"
-            value={stats.totalCheckins}
-            icon={<Activity size={24} className="text-amber-600" />}
-            color="bg-amber-50"
-          />
-        </div>
-      )}
+
+      {/* Enhanced Metrics Section */}
+      <EventMetrics />
+
+      {/* Quick Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 animate-pulse">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-32 bg-gray-200 rounded-xl"></div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white overflow-hidden shadow rounded-lg border-l-4 border-indigo-500">
+            <div className="px-4 py-5 sm:p-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-500 truncate">Total Events</p>
+                  <p className="mt-1 text-3xl font-semibold text-gray-900">
+                    {stats.totalEvents}
+                  </p>
+                  <p className="mt-2 flex items-center text-sm text-gray-500">
+                    <Clock className="flex-shrink-0 mr-1.5 h-4 w-4 text-gray-400" />
+                    All time
+                  </p>
+                </div>
+                <div className="flex items-center justify-center flex-shrink-0 w-12 h-12 rounded-full bg-indigo-100 text-indigo-600">
+                  <CalendarPlus className="h-6 w-6" />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Recent Events Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-5 border-b border-gray-200">
           <h2 className="text-lg font-medium text-gray-900">Recent Events</h2>
