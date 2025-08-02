@@ -3,13 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { supabase, Wristband } from '../services/supabase'
 import { WristbandBulkUpload } from '../components/WristbandBulkUpload'
 import {
-  QrCode,
   Edit,
   Trash2,
   Download,
-  Upload,
   Search,
-  Plus,
 } from 'lucide-react'
 const WristbandsPage = () => {
   const [searchParams] = useSearchParams()
@@ -157,58 +154,27 @@ const WristbandsPage = () => {
 
   return (
     <div className="container py-4">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>Wristbands</h2>
-        <div className="d-flex gap-2">
-          <Link to={`/wristbands/new${selectedEvent ? `?eventId=${selectedEvent}` : ''}`} className="btn btn-primary">
-            <Plus size={16} className="me-1" /> Add Wristband
-          </Link>
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Wristbands</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage event wristbands and bulk uploads</p>
         </div>
-      </div>
-      
-      {selectedEvent && (
-        <WristbandBulkUpload 
-          eventId={selectedEvent} 
-          onUploadComplete={handleUploadComplete} 
-          className="mb-4"
-        />
-      )}
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
-        <h1 className="text-2xl font-bold text-gray-900">Wristbands</h1>
-        <Link
-          to={selectedEvent ? `/wristbands/new?event_id=${selectedEvent}` : "/wristbands/new"}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-        >
-          <QrCode size={16} className="mr-2" />
-          Register Wristband
-        </Link>
-        <div className="flex space-x-3">
-          {selectedEvent && (
-            <>
-              <Link
-                to={`/wristbands/new?eventId=${selectedEvent}`}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-              >
-                <QrCode size={16} className="mr-2" />
-                Add Wristband
-              </Link>
-              <Link
-                to={`/wristbands/bulk?eventId=${selectedEvent}`}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-              >
-                <Upload size={16} className="mr-2" />
-                Bulk Upload
-              </Link>
-              <Link
-                to={`/wristbands/export?eventId=${selectedEvent}`}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-              >
-                <Download size={16} className="mr-2" />
-                Export
-              </Link>
-            </>
-          )}
-        </div>
+        {selectedEvent && (
+          <div className="flex space-x-3">
+            <WristbandBulkUpload 
+              eventId={selectedEvent} 
+              onUploadComplete={handleUploadComplete}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
+            />
+            <Link
+              to={`/wristbands/export?eventId=${selectedEvent}`}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            >
+              <Download size={16} className="mr-2" />
+              Export
+            </Link>
+          </div>
+        )}
       </div>
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
