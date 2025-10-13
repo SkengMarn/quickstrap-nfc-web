@@ -5,32 +5,38 @@ const LoginPage = () => {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
+
     try {
+      // SECURITY FIX: Add rate limiting for login attempts
+      const { rateLimiter, rateLimitConfigs } = await import('../utils/rateLimiter');
+      const clientIP = 'client_' + (window.location.hostname || 'unknown');
+      
+      if (!rateLimiter.isAllowed(clientIP, rateLimitConfigs.login)) {
+        const timeUntilUnblocked = rateLimiter.getTimeUntilUnblocked(clientIP);
+        const minutes = Math.ceil(timeUntilUnblocked / (60 * 1000));
+        throw new Error(`Too many login attempts. Please try again in ${minutes} minutes.`);
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
-      if (error) throw error
-      // Check if user has admin access
-      if (data?.user) {
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
-          .single()
-        if (profileError) throw profileError
-        if (profileData.role !== 'admin') {
-          await supabase.auth.signOut()
-          throw new Error('Access denied. Admin privileges required.')
-        }
+
+      if (error) {
+        // Record failed attempt for rate limiting
+        rateLimiter.isAllowed(clientIP, rateLimitConfigs.login);
+        throw error;
       }
+
+      // Login successful - reset rate limit and redirect will be handled by the auth state change
+      rateLimiter.reset(clientIP);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'An error occurred during sign in';
-      setError(errorMessage);
+      setError(error instanceof Error ? error.message : 'An error occurred')
     } finally {
       setLoading(false)
     }

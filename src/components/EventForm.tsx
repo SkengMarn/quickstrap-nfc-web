@@ -4,6 +4,7 @@ import { supabase } from '../services/supabase';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import notification from '../utils/notifications';
+import { useOrganization } from '../contexts/OrganizationContext';
 
 interface EventFormData {
   name: string;
@@ -12,11 +13,15 @@ interface EventFormData {
   end_date: string;
   location: string;
   is_public: boolean;
+  total_capacity: number;
+  ticket_linking_mode: 'disabled' | 'optional' | 'required';
+  allow_unlinked_entry: boolean;
 }
 
 const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { currentOrganization } = useOrganization();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<EventFormData>({
     name: '',
@@ -25,6 +30,9 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
     end_date: '',
     location: '',
     is_public: false,
+    total_capacity: 0,
+    ticket_linking_mode: 'disabled',
+    allow_unlinked_entry: true,
   });
 
   useEffect(() => {
@@ -42,7 +50,13 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
       if (error) throw error;
       if (data) setFormData(prev => ({
         ...prev,
-        ...data,
+        name: data.name || '',
+        description: data.description || '',
+        location: data.location || '',
+        is_public: data.is_public || false,
+        total_capacity: data.total_capacity || 0,
+        ticket_linking_mode: data.ticket_linking_mode || 'disabled',
+        allow_unlinked_entry: data.allow_unlinked_entry !== false, // Default to true if not set
         start_date: data.start_date ? new Date(data.start_date).toISOString().slice(0, 16) : '',
         end_date: data.end_date ? new Date(data.end_date).toISOString().slice(0, 16) : ''
       }));
@@ -56,10 +70,30 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target as HTMLInputElement;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value,
-    }));
+    
+    let newValue = type === 'checkbox' 
+      ? (e.target as HTMLInputElement).checked 
+      : type === 'number' 
+        ? parseInt(value) || 0
+        : value;
+
+    setFormData(prev => {
+      const updated = { ...prev, [name]: newValue };
+      
+      // Handle ticket linking mode logic to prevent conflicts
+      if (name === 'ticket_linking_mode') {
+        if (value === 'disabled') {
+          // When disabled, allow_unlinked_entry doesn't matter
+          updated.allow_unlinked_entry = true;
+        } else if (value === 'required') {
+          // When required, must NOT allow unlinked entry
+          updated.allow_unlinked_entry = false;
+        }
+        // For 'optional', leave allow_unlinked_entry as user preference
+      }
+      
+      return updated;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -162,7 +196,8 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
         ? await supabase.from('events').update(eventData).eq('id', id).select()
         : await supabase.from('events').insert([{ 
             ...eventData, 
-            created_by: (await supabase.auth.getUser()).data.user?.id 
+            created_by: (await supabase.auth.getUser()).data.user?.id,
+            organization_id: currentOrganization?.id
           }]).select();
 
       if (error) {
@@ -344,6 +379,64 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
             className="h-4 w-4 rounded"
           />
           <label className="ml-2 text-sm">Make event public</label>
+        </div>
+
+        {/* Advanced Configuration Section */}
+        <div className="border-t pt-6">
+          <h3 className="text-lg font-medium mb-4">Event Configuration</h3>
+          
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Total Capacity</label>
+              <input
+                type="number"
+                name="total_capacity"
+                value={formData.total_capacity}
+                onChange={handleChange}
+                className="w-full p-2 border rounded"
+                min="0"
+                placeholder="0 = unlimited"
+              />
+              <p className="text-xs text-gray-500 mt-1">Set to 0 for unlimited capacity</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Ticket Linking Mode</label>
+              <select
+                name="ticket_linking_mode"
+                value={formData.ticket_linking_mode}
+                onChange={handleChange}
+                className="w-full p-2 border rounded"
+              >
+                <option value="disabled">Disabled - Anyone with wristband can enter</option>
+                <option value="optional">Optional - Ticket linking available, entry flexible</option>
+                <option value="required">Required - Only linked tickets can enter</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                {formData.ticket_linking_mode === 'disabled' && 'No guest list validation - any wristband works'}
+                {formData.ticket_linking_mode === 'optional' && 'Guest list available but not enforced - you control entry policy below'}
+                {formData.ticket_linking_mode === 'required' && 'Strict guest list enforcement - only valid tickets can enter'}
+              </p>
+            </div>
+          </div>
+
+          {formData.ticket_linking_mode === 'optional' && (
+            <div className="mt-4">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="allow_unlinked_entry"
+                  checked={formData.allow_unlinked_entry}
+                  onChange={handleChange}
+                  className="h-4 w-4 rounded"
+                />
+                <label className="ml-2 text-sm">Allow entry without linked tickets</label>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                When enabled, attendees can check in even if their wristband isn't linked to a ticket
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end space-x-3 pt-4">

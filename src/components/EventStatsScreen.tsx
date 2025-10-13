@@ -3,35 +3,7 @@ import { ArrowDownToLine, RefreshCw, Filter } from 'lucide-react';
 import SummaryCard from './SummaryCard';
 import CategoryBreakdown from './CategoryBreakdown';
 import FilterModal from './FilterModal';
-// Mock data for demo purposes
-const mockCategories = ['VIP', 'General Admission', 'Staff', 'Media', 'Artist']
-const mockStats = [
-  {
-    category: 'VIP',
-    totalWristbands: 250,
-    checkedInWristbands: 187,
-  },
-  {
-    category: 'General Admission',
-    totalWristbands: 1500,
-    checkedInWristbands: 1023,
-  },
-  {
-    category: 'Staff',
-    totalWristbands: 100,
-    checkedInWristbands: 95,
-  },
-  {
-    category: 'Media',
-    totalWristbands: 50,
-    checkedInWristbands: 34,
-  },
-  {
-    category: 'Artist',
-    totalWristbands: 75,
-    checkedInWristbands: 68,
-  },
-]
+import { supabase } from '../services/supabase';
 
 interface CategoryStat {
   category: string;
@@ -78,11 +50,53 @@ const EventStatsScreen: React.FC<EventStatsScreenProps> = ({ eventId }) => {
         setIsRefreshing(true)
       }
       try {
-        // In a real app, this would be an API call
-        // Simulating API delay
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-        setCategories(mockCategories)
-        setStats(mockStats)
+        // Fetch wristbands data from database
+        const { data: wristbands, error: wristbandsError } = await supabase
+          .from('wristbands')
+          .select('id, category, is_active')
+          .eq('event_id', eventId)
+
+        if (wristbandsError) throw wristbandsError
+
+        // Fetch check-in logs
+        const { data: checkins, error: checkinsError } = await supabase
+          .from('checkin_logs')
+          .select('wristband_id')
+          .eq('event_id', eventId)
+
+        if (checkinsError) throw checkinsError
+
+        // Process data to get category stats
+        const categoryMap = new Map<string, { total: number; checkedIn: number }>()
+        
+        // Count total wristbands by category
+        wristbands?.forEach((wristband) => {
+          const category = wristband.category || 'Uncategorized'
+          const current = categoryMap.get(category) || { total: 0, checkedIn: 0 }
+          current.total++
+          categoryMap.set(category, current)
+        })
+
+        // Count checked-in wristbands by category
+        const checkedInWristbandIds = new Set(checkins?.map(c => c.wristband_id) || [])
+        wristbands?.forEach((wristband) => {
+          if (checkedInWristbandIds.has(wristband.id)) {
+            const category = wristband.category || 'Uncategorized'
+            const current = categoryMap.get(category)!
+            current.checkedIn++
+          }
+        })
+
+        // Convert to arrays
+        const realCategories = Array.from(categoryMap.keys())
+        const realStats: CategoryStat[] = Array.from(categoryMap.entries()).map(([category, data]) => ({
+          category,
+          totalWristbands: data.total,
+          checkedInWristbands: data.checkedIn
+        }))
+
+        setCategories(realCategories)
+        setStats(realStats)
         setError(null)
         setLastRefresh(new Date())
       } catch (err) {

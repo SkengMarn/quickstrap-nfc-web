@@ -1,279 +1,279 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { supabase, Event } from '../services/supabase';
-import { CalendarPlus, Edit, Trash2, Search } from 'lucide-react';
-import notification from '../utils/notifications';
-import LoadingButton from '../components/common/LoadingButton';
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { supabase, Event } from '../services/supabase'
+import { Plus, Calendar, MapPin, Users, Clock, Search, Edit, Trash2 } from 'lucide-react'
+
 const EventsPage = () => {
   const [events, setEvents] = useState<Event[]>([])
-  const [loading, setLoading] = useState(true);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const navigate = useNavigate();
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([])
+  const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchEvents()
   }, [])
 
+  useEffect(() => {
+    filterEvents()
+  }, [events, searchTerm, statusFilter])
+
   const fetchEvents = async () => {
     try {
-      setLoading(true);
       const { data, error } = await supabase
         .from('events')
         .select('*')
-        .order('start_date', { ascending: false });
+        .order('created_at', { ascending: false })
 
-      if (error) throw error;
-      setEvents(data || []);
+      if (error) throw error
+      setEvents(data || [])
     } catch (error) {
-      console.error('Error fetching events:', error);
-      notification.error('Could not load events', error, {
-        origin: 'app',
-        context: {
-          entity: 'events',
-          operation: 'read',
-          error: error instanceof Error ? error : new Error('Failed to fetch events'),
-          technicalDetails: error instanceof Error ? error.message : 'Failed to fetch events'
-        },
-        toastOptions: {
-          autoClose: 10000
-        }
-      });
+      console.error('Error fetching events:', error)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
+
+  const filterEvents = () => {
+    let filtered = events
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(event =>
+        event.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        event.location?.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    }
+
+    // Status filter
+    if (statusFilter !== 'all') {
+      const now = new Date()
+      filtered = filtered.filter(event => {
+        const startDate = new Date(event.start_date)
+        const endDate = new Date(event.end_date)
+        const isActive = now >= startDate && now <= endDate
+        const isPast = now > endDate
+        const isUpcoming = now < startDate
+
+        switch (statusFilter) {
+          case 'active': return isActive
+          case 'upcoming': return isUpcoming
+          case 'past': return isPast
+          default: return true
+        }
+      })
+    }
+
+    setFilteredEvents(filtered)
+  }
 
   const deleteEvent = async (id: string) => {
-    const eventToDelete = events.find(e => e.id === id);
-    if (!eventToDelete) return;
+    const event = events.find(e => e.id === id)
+    if (!event || !confirm(`Delete "${event.name}"? This cannot be undone.`)) return
 
-    if (!window.confirm(
-      `Are you sure you want to delete "${eventToDelete.name}"? This will permanently delete the event and all associated data including wristbands and check-in logs.`
-    )) {
-      return;
-    }
-
-    setDeletingId(id);
+    setDeletingId(id)
     try {
-      // Show warning about related data deletion
-      notification.warning(`Deleting "${eventToDelete.name}" and all its related data...`, {
-        origin: 'app',
-        context: {
-          entity: 'event',
-          operation: 'delete',
-          eventId: id,
-          eventName: eventToDelete.name,
-          technicalDetails: 'Initiating deletion of event and all related data'
-        },
-        toastOptions: {
-          autoClose: 3000
-        }
-      });
-
-      // Delete related records first (due to foreign key constraints)
-      const deletePromises = [
+      // Delete related records first
+      await Promise.all([
         supabase.from('checkin_logs').delete().eq('event_id', id),
         supabase.from('wristbands').delete().eq('event_id', id),
         supabase.from('event_access').delete().eq('event_id', id)
-      ];
+      ])
       
-      await Promise.all(deletePromises);
+      const { error } = await supabase.from('events').delete().eq('id', id)
+      if (error) throw error
       
-      // Then delete the event
-      const { error } = await supabase
-        .from('events')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
-      
-      // Update the UI
-      setEvents(events.filter((event) => event.id !== id));
-      
-      // Show success message with details
-      notification.success(
-        `Event "${eventToDelete.name}" was successfully deleted.\n` +
-        'Note: This action cannot be undone. All related data has been removed.',
-        {
-          origin: 'app',
-          context: {
-            entity: 'event',
-            operation: 'delete',
-            eventId: id,
-            eventName: eventToDelete.name,
-            technicalDetails: 'Event and all related data have been permanently removed'
-          },
-          toastOptions: {
-            autoClose: 10000
-          }
-        }
-      );
-      
+      setEvents(events.filter(e => e.id !== id))
     } catch (error) {
-      notification.error(
-        `Failed to delete event "${eventToDelete?.name || 'Unknown'}". Please try again.`,
-        error,
-        {
-          origin: 'app',
-          context: {
-            entity: 'event',
-            operation: 'delete',
-            eventId: id,
-            eventName: eventToDelete?.name,
-            error: error instanceof Error ? error : new Error(String(error)),
-            technicalDetails: error instanceof Error ? error.message : 'Failed to delete event'
-          },
-          toastOptions: { 
-            autoClose: 10000 
-          }
-      });
+      console.error('Error deleting event:', error)
+      alert('Failed to delete event')
     } finally {
-      setDeletingId(null);
+      setDeletingId(null)
     }
   }
-  const filteredEvents = React.useMemo(() => 
-    events.filter(
-      (event) =>
-        event.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (event.location &&
-          event.location.toLowerCase().includes(searchTerm.toLowerCase()))
-    ),
-    [events, searchTerm]
-  );
+
+  const getEventStatus = (event: Event) => {
+    const now = new Date()
+    const startDate = new Date(event.start_date)
+    const endDate = new Date(event.end_date)
+    
+    if (now >= startDate && now <= endDate) return 'active'
+    if (now > endDate) return 'past'
+    return 'upcoming'
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">Events</h1>
-        <LoadingButton
-          onClick={() => navigate('/events/new')}
-          variant="primary"
-        >
-          <CalendarPlus size={16} className="mr-2" />
-          Create Event
-        </LoadingButton>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Events</h1>
+          <p className="text-gray-600 mt-1">Manage and monitor your events</p>
+        </div>
+        <Link to="/events/new" className="btn btn-primary">
+          <Plus className="h-4 w-4 mr-2" />
+          New Event
+        </Link>
       </div>
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search size={18} className="text-gray-400" />
+
+      {/* Filters */}
+      <div className="card">
+        <div className="card-body">
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Search */}
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search events..."
+                  className="form-input pl-10"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
             </div>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search events..."
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
+            
+            {/* Status Filter */}
+            <div className="sm:w-48">
+              <select
+                className="form-input form-select"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">All Events</option>
+                <option value="active">Active</option>
+                <option value="upcoming">Upcoming</option>
+                <option value="past">Past</option>
+              </select>
+            </div>
           </div>
         </div>
-        {loading ? (
-          <div className="animate-pulse">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="px-6 py-4 border-b border-gray-200">
-                <div className="h-6 bg-gray-200 rounded w-1/3 mb-2"></div>
-                <div className="h-4 bg-gray-100 rounded w-1/4"></div>
-              </div>
-            ))}
+      </div>
+
+      {/* Events Table */}
+      {filteredEvents.length === 0 ? (
+        <div className="card">
+          <div className="card-body text-center py-12">
+            <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              {events.length === 0 ? 'No events yet' : 'No events match your filters'}
+            </h3>
+            <p className="text-gray-600 mb-6">
+              {events.length === 0 
+                ? 'Get started by creating your first event'
+                : 'Try adjusting your search or filter criteria'
+              }
+            </p>
+            {events.length === 0 && (
+              <Link to="/events/new" className="btn btn-primary">
+                <Plus className="h-4 w-4 mr-2" />
+                Create Event
+              </Link>
+            )}
           </div>
-        ) : filteredEvents.length > 0 ? (
+        </div>
+      ) : (
+        <div className="card">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="table">
+              <thead>
                 <tr>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Event Name
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Date
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Location
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Capacity
-                  </th>
-                  <th
-                    scope="col"
-                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    Actions
-                  </th>
+                  <th>Event</th>
+                  <th>Date Range</th>
+                  <th>Location</th>
+                  <th>Capacity</th>
+                  <th>Status</th>
+                  <th className="text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody>
                 {filteredEvents.map((event) => {
+                  const status = getEventStatus(event)
                   const startDate = new Date(event.start_date)
                   const endDate = new Date(event.end_date)
-                  const isActive =
-                    new Date() >= startDate && new Date() <= endDate
-                  const isPast = new Date() > endDate
+
                   return (
                     <tr key={event.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div>
-                            <Link
-                              to={`/events/${event.id}`}
-                              className="text-sm font-medium text-blue-600 hover:text-blue-800"
-                            >
-                              {event.name}
-                            </Link>
-                            {isActive && (
-                              <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                Active
-                              </span>
-                            )}
-                            {isPast && (
-                              <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                Past
-                              </span>
-                            )}
-                          </div>
+                      <td>
+                        <Link
+                          to={`/events/${event.id}`}
+                          className="font-medium text-blue-600 hover:text-blue-700"
+                        >
+                          {event.name}
+                        </Link>
+                        {event.description && (
+                          <p className="text-sm text-gray-500 mt-1 line-clamp-1">
+                            {event.description}
+                          </p>
+                        )}
+                      </td>
+                      <td>
+                        <div className="text-sm">
+                          <div>{startDate.toLocaleDateString()}</div>
+                          <div className="text-gray-500">to {endDate.toLocaleDateString()}</div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {startDate.toLocaleDateString()} -{' '}
-                        {endDate.toLocaleDateString()}
+                      <td>
+                        <div className="flex items-center text-sm">
+                          {event.location ? (
+                            <>
+                              <MapPin className="h-3 w-3 mr-1 text-gray-400" />
+                              {event.location}
+                            </>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {event.location || '-'}
+                      <td>
+                        <div className="flex items-center text-sm">
+                          <Users className="h-3 w-3 mr-1 text-gray-400" />
+                          {event.total_capacity > 0 ? event.total_capacity : 'Unlimited'}
+                        </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {event.total_capacity > 0
-                          ? event.total_capacity
-                          : 'Unlimited'}
+                      <td>
+                        <span className={`status-badge ${
+                          status === 'active' ? 'status-success' :
+                          status === 'upcoming' ? 'status-warning' :
+                          'status-neutral'
+                        }`}>
+                          {status === 'active' ? 'Active' :
+                           status === 'upcoming' ? 'Upcoming' :
+                           'Completed'}
+                        </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <Link
-                          to={`/events/${event.id}/edit`}
-                          className="text-blue-600 hover:text-blue-900 mr-4"
-                        >
-                          <Edit size={16} />
-                        </Link>
-                        <LoadingButton
-                          onClick={() => deleteEvent(event.id)}
-                          variant="danger"
-                          isLoading={deletingId === event.id}
-                          loadingText="Deleting..."
-                          className="p-2 text-red-600 hover:bg-red-50 hover:text-red-900"
-                          title="Delete event"
-                        >
-                          <Trash2 size={18} />
-                        </LoadingButton>
+                      <td>
+                        <div className="flex items-center justify-end space-x-2">
+                          <Link
+                            to={`/events/${event.id}/edit`}
+                            className="btn-ghost btn-sm p-2"
+                            title="Edit event"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Link>
+                          <button
+                            onClick={() => deleteEvent(event.id)}
+                            disabled={deletingId === event.id}
+                            className="btn-ghost btn-sm p-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Delete event"
+                          >
+                            {deletingId === event.id ? (
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -281,25 +281,10 @@ const EventsPage = () => {
               </tbody>
             </table>
           </div>
-        ) : (
-          <div className="text-center py-8">
-            <p className="text-gray-500 text-sm">
-              {searchTerm
-                ? 'No events found matching your search'
-                : 'No events found'}
-            </p>
-            {!searchTerm && (
-              <Link
-                to="/events/new"
-                className="mt-2 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200"
-              >
-                Create your first event
-              </Link>
-            )}
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
+
 export default EventsPage

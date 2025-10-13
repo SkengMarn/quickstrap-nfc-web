@@ -1,0 +1,4 @@
+ticket_number,ticket_category,holder_name,holder_email,holder_phone
+TICKET001,VIP,John Doe,john@example.com,+256700000000
+TICKET002,REGULAR,Jane Smith,jane@example.com,+256700000001
+TICKET003,STAFF,Staff Member,staff@company.com,+256700000002

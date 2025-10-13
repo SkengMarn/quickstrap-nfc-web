@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Environment Variables</title>
+</head>
+<body>
+    <h1>Environment Variables Debug</h1>
+    <div id="debug"></div>
+
+    <script type="module">
+        // Only show debug info in development mode
+        if (import.meta.env.MODE !== 'development' && import.meta.env.DEV !== true) {
+            document.body.innerHTML = '<h1>Debug page disabled in production</h1>';
+        } else {
+            const debugDiv = document.getElementById('debug');
+
+            // Whitelist of safe environment variables to display
+            const safeVars = ['MODE', 'DEV', 'PROD', 'SSR', 'BASE_URL'];
+
+            // Function to escape HTML entities
+            const escapeHTML = (str) => {
+                const div = document.createElement('div');
+                div.textContent = str;
+                return div.innerHTML;
+            };
+
+            // Function to mask sensitive values
+            const maskValue = (key, value) => {
+                const sensitivePatterns = ['KEY', 'SECRET', 'TOKEN', 'ANON', 'PASSWORD', 'API'];
+                if (sensitivePatterns.some(pattern => key.toUpperCase().includes(pattern))) {
+                    return value ? '[REDACTED]' : 'UNDEFINED';
+                }
+                return value || 'UNDEFINED';
+            };
+
+            // Build safe display of environment variables
+            let envDisplay = '';
+            for (const [key, value] of Object.entries(import.meta.env)) {
+                const escapedKey = escapeHTML(String(key));
+                if (safeVars.includes(key)) {
+                    const escapedValue = escapeHTML(String(value));
+                    envDisplay += `<p><strong>${escapedKey}:</strong> ${escapedValue}</p>`;
+                } else {
+                    const maskedValue = maskValue(key, value);
+                    const escapedMaskedValue = escapeHTML(String(maskedValue));
+                    envDisplay += `<p><strong>${escapedKey}:</strong> ${escapedMaskedValue}</p>`;
+                }
+            }
+
+            debugDiv.innerHTML = `
+                <div style="background: #fff3cd; padding: 10px; border: 1px solid #ffc107; margin-bottom: 10px;">
+                    ⚠️ <strong>Development Mode Only:</strong> This page is only accessible in development.
+                </div>
+                <h2>Environment Variables</h2>
+                ${envDisplay}
+                <p style="margin-top: 20px; color: #666; font-size: 0.9em;">
+                    Note: Sensitive values (containing KEY, SECRET, TOKEN, ANON) are redacted for security.
+                </p>
+            `;
+        }
+    </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 import { toast, type TypeOptions, type ToastOptions } from 'react-toastify';
 import { v4 as uuidv4 } from 'uuid';
-import { useNotificationStore } from '@/stores/notificationStore';
+import { useNotificationStore } from '../stores/notificationStore';
 import type {
   Severity,
   SystemNotification,
@@ -8,7 +8,7 @@ import type {
   Operation,
   NotificationMethods,
   FunctionalNotificationConfig
-} from '@/types/notification.types';
+} from '../types/notification.types';
 
 // Default toast options
 const defaultToastOptions: Omit<ToastOptions, 'draggable'> & { draggable: boolean } = {
@@ -74,7 +74,7 @@ const createSystemNotification = (
   }
 
   // Add to store
-  useNotificationStore.getState().addNotification(notification);
+  useNotificationStore().addNotification(notification);
   return notification;
 };
 
@@ -118,7 +118,7 @@ const createFunctionalNotification = (
   }
 
   // Add to store
-  useNotificationStore.getState().addNotification(notification);
+  useNotificationStore().addNotification(notification);
   return notification;
 };
 
@@ -157,7 +157,7 @@ const mapSeverityToType = (severity: Severity): TypeOptions => {
 // Notification methods
 // Helper function to mark a notification as read
 const markAsRead = (id: string): void => {
-  useNotificationStore.getState().markAsRead(id);
+  useNotificationStore().markAsRead(id);
 };
 
 const notification: NotificationMethods = {

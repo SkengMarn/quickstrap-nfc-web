@@ -1,21 +1,23 @@
-// Dashboard layout component
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
+
 type DashboardLayoutProps = {
   user: any
 }
+
 const DashboardLayout = ({ user }: DashboardLayoutProps) => {
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="layout-container">
       <Sidebar />
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="layout-main">
         <Header user={user} />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+        <main className="layout-content">
           <Outlet />
         </main>
       </div>
     </div>
   )
 }
+
 export default DashboardLayout

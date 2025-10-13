@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Environment Test</title>
+</head>
+<body>
+    <h1>Environment Variables Test</h1>
+    <div id="output"></div>
+    
+    <script type="module">
+        console.log('Testing environment variables...');
+        
+        const output = document.getElementById('output');
+        
+        try {
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+            const reactUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL;
+            const reactKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY;
+            
+            output.innerHTML = `
+                <h2>Environment Variables:</h2>
+                <p><strong>VITE_SUPABASE_URL:</strong> ${supabaseUrl || 'UNDEFINED'}</p>
+                <p><strong>VITE_SUPABASE_ANON_KEY:</strong> ${supabaseKey ? 'DEFINED' : 'UNDEFINED'}</p>
+                <p><strong>VITE_REACT_APP_SUPABASE_URL:</strong> ${reactUrl || 'UNDEFINED'}</p>
+                <p><strong>VITE_REACT_APP_SUPABASE_ANON_KEY:</strong> ${reactKey ? 'DEFINED' : 'UNDEFINED'}</p>
+                <h2>All Environment Variables:</h2>
+                <pre>${JSON.stringify(import.meta.env, null, 2)}</pre>
+            `;
+            
+            console.log('Environment test completed successfully');
+        } catch (error) {
+            console.error('Environment test failed:', error);
+            output.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+        }
+    </script>
+</body>
+</html>

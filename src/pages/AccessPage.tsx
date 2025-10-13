@@ -52,14 +52,6 @@ const AccessPage = () => {
           created_at,
           events (
             name
-          ),
-          profiles!event_access_user_id_fkey (
-            email,
-            full_name
-          ),
-          grantedBy:profiles!event_access_granted_by_fkey (
-            email,
-            full_name
           )
         `,
         )
@@ -67,7 +59,26 @@ const AccessPage = () => {
           ascending: false,
         })
       if (error) throw error
-      setAccessList(data || [])
+      
+      // Fetch profile information separately
+      if (data && data.length > 0) {
+        const userIds = [...new Set([...data.map(access => access.user_id), ...data.map(access => access.granted_by).filter(Boolean)])]
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, email, full_name')
+          .in('id', userIds)
+
+        // Merge access data with profile data
+        const enrichedData = data.map(access => ({
+          ...access,
+          profiles: profilesData?.find(profile => profile.id === access.user_id) || null,
+          grantedBy: profilesData?.find(profile => profile.id === access.granted_by) || null
+        }))
+        
+        setAccessList(enrichedData)
+      } else {
+        setAccessList([])
+      }
     } catch (error) {
       console.error('Error fetching access list:', error)
     } finally {
@@ -89,14 +100,6 @@ const AccessPage = () => {
           created_at,
           events (
             name
-          ),
-          profiles!event_access_user_id_fkey (
-            email,
-            full_name
-          ),
-          grantedBy:profiles!event_access_granted_by_fkey (
-            email,
-            full_name
           )
         `,
         )
@@ -105,7 +108,26 @@ const AccessPage = () => {
           ascending: false,
         })
       if (error) throw error
-      setAccessList(data || [])
+      
+      // Fetch profile information separately
+      if (data && data.length > 0) {
+        const userIds = [...new Set([...data.map(access => access.user_id), ...data.map(access => access.granted_by).filter(Boolean)])]
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, email, full_name')
+          .in('id', userIds)
+
+        // Merge access data with profile data
+        const enrichedData = data.map(access => ({
+          ...access,
+          profiles: profilesData?.find(profile => profile.id === access.user_id) || null,
+          grantedBy: profilesData?.find(profile => profile.id === access.granted_by) || null
+        }))
+        
+        setAccessList(enrichedData)
+      } else {
+        setAccessList([])
+      }
     } catch (error) {
       console.error('Error fetching access list:', error)
     } finally {

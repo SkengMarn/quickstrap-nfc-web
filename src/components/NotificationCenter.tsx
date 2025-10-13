@@ -2,7 +2,29 @@ import React, { useState, useRef, useEffect } from 'react';
 import { X, Bell, Clock, AlertCircle, CheckCircle, Info, XCircle } from 'lucide-react';
 import { useNotificationStore } from '../stores/notificationStore';
 import type { Notification, SystemNotification, FunctionalNotification } from '@/types/notification.types';
-import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
+// Temporarily disable date-fns
+// import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
+
+// Mock function for date formatting
+const formatDistanceToNow = (date: Date | string, options?: { addSuffix?: boolean }) => {
+  const now = new Date();
+  const target = new Date(date);
+  const diffMs = now.getTime() - target.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  
+  let result = '';
+  if (diffMins < 1) result = 'just now';
+  else if (diffMins < 60) result = `${diffMins} minute${diffMins === 1 ? '' : 's'}`;
+  else if (diffMins < 1440) {
+    const diffHours = Math.floor(diffMins / 60);
+    result = `${diffHours} hour${diffHours === 1 ? '' : 's'}`;
+  } else {
+    const diffDays = Math.floor(diffMins / 1440);
+    result = `${diffDays} day${diffDays === 1 ? '' : 's'}`;
+  }
+  
+  return options?.addSuffix ? `${result} ago` : result;
+};
 
 const NotificationCenter: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);

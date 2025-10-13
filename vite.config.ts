@@ -7,9 +7,10 @@ export default defineConfig({
   publicDir: 'public',
   server: {
     port: 3000,
-    open: true,
+    host: 'localhost',
+    open: false,
     cors: true,
-    strictPort: true,
+    strictPort: false,
     fs: {
       strict: false
     }

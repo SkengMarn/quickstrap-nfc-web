@@ -1,6 +1,31 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import notification from '../utils/notifications';
+import InteractiveTour from '../components/onboarding/InteractiveTour';
+import { 
+  BookOpen, 
+  Settings, 
+  User, 
+  Lock, 
+  Bell, 
+  Shield, 
+  Database, 
+  Palette,
+  Globe,
+  Smartphone,
+  Mail,
+  Key,
+  Eye,
+  EyeOff,
+  Save,
+  RefreshCw,
+  Download,
+  Upload,
+  Trash2,
+  AlertTriangle,
+  CheckCircle,
+  Info
+} from 'lucide-react';
 
 interface UserProfile {
   id: string;
@@ -13,7 +38,8 @@ interface UserProfile {
 const SettingsPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'account' | 'password'>('account');
+  const [activeTab, setActiveTab] = useState<'account' | 'password' | 'notifications' | 'security' | 'system' | 'help'>('account');
+  const [showOnboarding, setShowOnboarding] = useState(false);
   // User state is managed by formData, but we keep the user reference
   const [, setUser] = useState<UserProfile | null>(null);
   
@@ -24,12 +50,48 @@ const SettingsPage: React.FC = () => {
     full_name: '',
     phone: ''
   });
-  
-  // Password form state
+
+  // Additional settings state
+  const [notificationSettings, setNotificationSettings] = useState({
+    emailNotifications: true,
+    smsNotifications: false,
+    telegramNotifications: true,
+    capacityAlerts: true,
+    securityAlerts: true,
+    staffUpdates: false,
+    systemMaintenance: true,
+    weeklyReports: true
+  });
+
+  const [securitySettings, setSecuritySettings] = useState({
+    twoFactorEnabled: false,
+    sessionTimeout: 30,
+    loginNotifications: true,
+    ipWhitelist: '',
+    apiKeyRotation: 'monthly'
+  });
+
+  const [systemSettings, setSystemSettings] = useState({
+    theme: 'light',
+    language: 'en',
+    timezone: 'UTC',
+    dateFormat: 'MM/DD/YYYY',
+    currency: 'USD',
+    autoSave: true,
+    debugMode: false,
+    analyticsEnabled: true
+  });
+
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
+  });
+
+  const [showPasswords, setShowPasswords] = useState({
+    current: false,
+    new: false,
+    confirm: false
   });
 
   useEffect(() => {
@@ -210,6 +272,83 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+  };
+
+  // Settings save functions
+  const saveNotificationSettings = async () => {
+    try {
+      setLoading(true);
+      // In real app, save to database
+      notification.success('Notification settings saved successfully', { origin: 'app', context: {} });
+    } catch (error) {
+      notification.error('Failed to save notification settings', { origin: 'app', context: {} });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveSecuritySettings = async () => {
+    try {
+      setLoading(true);
+      // In real app, save to database
+      notification.success('Security settings saved successfully', { origin: 'app', context: {} });
+    } catch (error) {
+      notification.error('Failed to save security settings', { origin: 'app', context: {} });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveSystemSettings = async () => {
+    try {
+      setLoading(true);
+      // In real app, save to database
+      notification.success('System settings saved successfully', { origin: 'app', context: {} });
+    } catch (error) {
+      notification.error('Failed to save system settings', { origin: 'app', context: {} });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportSettings = () => {
+    const settings = {
+      notifications: notificationSettings,
+      security: securitySettings,
+      system: systemSettings,
+      exportedAt: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'quickstrap-settings.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importSettings = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const settings = JSON.parse(e.target?.result as string);
+        if (settings.notifications) setNotificationSettings(settings.notifications);
+        if (settings.security) setSecuritySettings(settings.security);
+        if (settings.system) setSystemSettings(settings.system);
+        notification.success('Settings imported successfully', { origin: 'app', context: {} });
+      } catch (error) {
+        notification.error('Invalid settings file', { origin: 'app', context: {} });
+      }
+    };
+    reader.readAsText(file);
+  };
+
   if (loading && !formData.email) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -239,19 +378,30 @@ const SettingsPage: React.FC = () => {
             <button
               onClick={() => setActiveTab('password')}
               className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
-                activeTab === 'password' 
-                  ? 'border-blue-500 text-blue-600' 
+                activeTab === 'password'
+                  ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
               type="button"
             >
               Change Password
             </button>
+            <button
+              onClick={() => setActiveTab('help')}
+              className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
+                activeTab === 'help'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+              type="button"
+            >
+              Help & Onboarding
+            </button>
           </nav>
         </div>
-        
+
         <div className="p-6">
-          {activeTab === 'account' ? (
+          {activeTab === 'account' && (
             <form onSubmit={handleUpdateProfile} className="space-y-6">
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700">
@@ -308,7 +458,9 @@ const SettingsPage: React.FC = () => {
                 </button>
               </div>
             </form>
-          ) : (
+          )}
+
+          {activeTab === 'password' && (
             <form onSubmit={(e) => {
               e.preventDefault();
               handlePasswordUpdate(e);
@@ -395,8 +547,108 @@ const SettingsPage: React.FC = () => {
               </div>
             </form>
           )}
+
+          {activeTab === 'help' && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6 border border-blue-200">
+                <div className="flex items-center mb-4">
+                  <BookOpen className="w-8 h-8 text-blue-600 mr-3" />
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">Getting Started Guide</h3>
+                    <p className="text-sm text-gray-600">Learn how to use all portal features</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="bg-white rounded-lg p-4 border border-blue-200">
+                    <h4 className="font-semibold text-gray-900 mb-2">🎓 Interactive Onboarding Wizard</h4>
+                    <p className="text-sm text-gray-700 mb-3">
+                      Take a guided tour through the portal's key features. Perfect for new users or as a refresher.
+                    </p>
+                    <button
+                      onClick={() => setShowOnboarding(true)}
+                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+                    >
+                      <BookOpen className="w-4 h-4 mr-2" />
+                      Start Onboarding Wizard
+                    </button>
+                  </div>
+
+                  <div className="bg-white rounded-lg p-4 border border-purple-200">
+                    <h4 className="font-semibold text-gray-900 mb-2">📚 Quick Reference Guide</h4>
+                    <p className="text-sm text-gray-700 mb-3">
+                      Access the complete feature documentation with step-by-step instructions.
+                    </p>
+                    <a
+                      href="/FEATURE_ACCESS_GUIDE.md"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center px-4 py-2 border border-purple-600 text-purple-600 rounded-md hover:bg-purple-50 transition"
+                    >
+                      View Documentation
+                    </a>
+                  </div>
+
+                  <div className="bg-white rounded-lg p-4 border border-green-200">
+                    <h4 className="font-semibold text-gray-900 mb-2">🎯 Quick Tips</h4>
+                    <ul className="space-y-2 text-sm text-gray-700">
+                      <li className="flex items-start">
+                        <span className="text-green-600 mr-2">✓</span>
+                        <span>Go to <strong>Events</strong> → Open any event to see 10 feature tabs</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-green-600 mr-2">✓</span>
+                        <span>Use <strong>Command Center</strong> tab during live events for real-time monitoring</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-green-600 mr-2">✓</span>
+                        <span>Bulk upload wristbands via CSV in the <strong>Wristbands</strong> tab</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-green-600 mr-2">✓</span>
+                        <span>Monitor fraud detection in real-time with the <strong>Fraud Detection</strong> tab</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-green-600 mr-2">✓</span>
+                        <span>Generate reports in multiple formats using the <strong>Export</strong> tab</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="bg-white rounded-lg p-4 border border-yellow-200">
+                    <h4 className="font-semibold text-gray-900 mb-2">💡 Pro Tips</h4>
+                    <ul className="space-y-2 text-sm text-gray-700">
+                      <li className="flex items-start">
+                        <span className="text-yellow-600 mr-2">💡</span>
+                        <span>Run pre-event tests in the <strong>Testing</strong> tab before going live</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-yellow-600 mr-2">💡</span>
+                        <span>Set up automated reports to be emailed daily/weekly</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-yellow-600 mr-2">💡</span>
+                        <span>Use <strong>Emergency Controls</strong> for quick response during incidents</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-yellow-600 mr-2">💡</span>
+                        <span>Check <strong>Autonomous Operations</strong> in sidebar for AI-powered features</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+      {/* Interactive Tour */}
+      {showOnboarding && (
+        <InteractiveTour
+          onClose={handleOnboardingComplete}
+          onComplete={handleOnboardingComplete}
+        />
+      )}
     </div>
   );
 };

@@ -1,72 +1,98 @@
-// Sidebar component
-import { NavLink } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard,
-  CalendarDays,
-  QrCode,
-  ClipboardList,
+  Home,
+  Calendar,
   Users,
+  CheckSquare,
   Settings,
+  BarChart3,
+  Shield,
+  AlertTriangle,
+  FileText,
+  Zap,
+  Building,
+  Webhook,
+  MapPin
 } from 'lucide-react'
+
 const Sidebar = () => {
-  const navItems = [
+  const location = useLocation()
+
+  const navigationSections = [
     {
-      to: '/',
-      label: 'Dashboard',
-      icon: <LayoutDashboard size={20} />,
+      title: 'Overview',
+      items: [
+        { name: 'Dashboard', href: '/', icon: Home },
+      ]
     },
     {
-      to: '/events',
-      label: 'Events',
-      icon: <CalendarDays size={20} />,
+      title: 'Event Management',
+      items: [
+        { name: 'Events', href: '/events', icon: Calendar },
+        { name: 'Check-ins', href: '/checkins', icon: CheckSquare },
+      ]
     },
     {
-      to: '/wristbands',
-      label: 'Wristbands',
-      icon: <QrCode size={20} />,
+      title: 'Operations',
+      items: [
+        { name: 'Access Control', href: '/access', icon: Users },
+        { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+        { name: 'Reports', href: '/reports', icon: FileText },
+      ]
     },
     {
-      to: '/checkins',
-      label: 'Check-ins',
-      icon: <ClipboardList size={20} />,
+      title: 'Security & Monitoring',
+      items: [
+        { name: 'Fraud Detection', href: '/fraud', icon: Shield },
+        { name: 'Emergency Center', href: '/emergency', icon: AlertTriangle },
+        { name: 'Autonomous Ops', href: '/autonomous-operations', icon: Zap },
+      ]
     },
     {
-      to: '/access',
-      label: 'User Access',
-      icon: <Users size={20} />,
-    },
+      title: 'Administration',
+      items: [
+        { name: 'Organization', href: '/organization', icon: Building },
+        { name: 'Webhooks', href: '/webhooks', icon: Webhook },
+        { name: 'Settings', href: '/settings', icon: Settings },
+      ]
+    }
   ]
+
   return (
-    <aside className="hidden md:flex md:flex-col md:w-64 bg-white border-r border-gray-200">
-      <div className="flex items-center justify-center h-16 border-b border-gray-200">
-        <h1 className="text-xl font-bold text-blue-600">Event Admin</h1>
+    <div className="layout-sidebar">
+      {/* Logo */}
+      <div className="flex items-center h-16 px-4 border-b border-gray-200">
+        <div className="flex items-center space-x-2">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <span className="text-white font-bold text-sm">NFC</span>
+          </div>
+          <h1 className="text-lg font-semibold text-gray-900">Portal</h1>
+        </div>
       </div>
-      <div className="flex flex-col flex-1 overflow-y-auto">
-        <nav className="flex-1 px-2 py-4 space-y-1">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                `flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${isActive ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'}`
-              }
-            >
-              <span className="mr-3">{item.icon}</span>
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-      </div>
-      <div className="p-4 border-t border-gray-200">
-        <NavLink
-          to="/settings"
-          className="flex items-center px-4 py-3 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
-        >
-          <Settings size={20} className="mr-3" />
-          Settings
-        </NavLink>
-      </div>
-    </aside>
+
+      {/* Navigation */}
+      <nav className="flex-1 py-4">
+        {navigationSections.map((section) => (
+          <div key={section.title} className="nav-section">
+            <div className="nav-section-title">{section.title}</div>
+            {section.items.map((item) => {
+              const isActive = location.pathname === item.href
+              return (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  className={`nav-item ${isActive ? 'active' : ''}`}
+                >
+                  <item.icon className="nav-item-icon" />
+                  {item.name}
+                </Link>
+              )
+            })}
+          </div>
+        ))}
+      </nav>
+    </div>
   )
 }
+
 export default Sidebar

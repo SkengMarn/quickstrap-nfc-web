@@ -1,0 +1,230 @@
+{
+  "name": "QuickStrap Telegram Notifications",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "quickstrap-telegram",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "your-webhook-id-here"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$node['Webhook Trigger'].json.event}}",
+              "operation": "equal",
+              "value2": "checkin.created"
+            }
+          ]
+        }
+      },
+      "name": "Check-in Events",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$node['Webhook Trigger'].json.event}}",
+              "operation": "contains",
+              "value2": "alert"
+            }
+          ]
+        }
+      },
+      "name": "Alert Events",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$node['Webhook Trigger'].json.data.priority}}",
+              "operation": "equal",
+              "value2": "critical"
+            }
+          ]
+        }
+      },
+      "name": "Critical Priority",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHAT_ID_HERE",
+        "text": "🎫 *New Check-in*\n\n👤 Wristband: `{{$node['Webhook Trigger'].json.data.wristband_id}}`\n🚪 Gate: {{$node['Webhook Trigger'].json.data.gate_name}}\n🎪 Event: {{$node['Webhook Trigger'].json.data.event_name}}\n⏰ Time: {{$node['Webhook Trigger'].json.timestamp}}\n👨‍💼 Staff: {{$node['Webhook Trigger'].json.data.staff_member}}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "name": "Send Check-in Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [680, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-bot-credentials",
+          "name": "QuickStrap Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHAT_ID_HERE",
+        "text": "⚠️ *Alert Notification*\n\n{{$node['Webhook Trigger'].json.data.formatted_message}}\n\n📊 Priority: {{$node['Webhook Trigger'].json.data.priority}}\n🎪 Event: {{$node['Webhook Trigger'].json.data.event_name}}\n⏰ Time: {{$node['Webhook Trigger'].json.timestamp}}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "name": "Send Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [680, 400],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-bot-credentials",
+          "name": "QuickStrap Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHAT_ID_HERE",
+        "text": "🚨 *CRITICAL ALERT* 🚨\n\n{{$node['Webhook Trigger'].json.data.formatted_message}}\n\n⚡ This requires immediate attention!\n🎪 Event: {{$node['Webhook Trigger'].json.data.event_name}}\n⏰ Time: {{$node['Webhook Trigger'].json.timestamp}}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "name": "Send Critical Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [680, 600],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-bot-credentials",
+          "name": "QuickStrap Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"success\",\n  \"message\": \"Notification sent to Telegram\",\n  \"timestamp\": \"{{new Date().toISOString()}}\"\n}"
+      },
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 400]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Check-in Events",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Alert Events",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Critical Priority",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check-in Events": {
+      "main": [
+        [
+          {
+            "node": "Send Check-in Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Events": {
+      "main": [
+        [
+          {
+            "node": "Send Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Critical Priority": {
+      "main": [
+        [
+          {
+            "node": "Send Critical Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Check-in Alert": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Alert": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Critical Alert": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "createdAt": "2024-01-01T00:00:00.000Z",
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "id": "quickstrap-telegram-workflow"
+}

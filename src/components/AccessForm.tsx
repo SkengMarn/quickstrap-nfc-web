@@ -74,7 +74,8 @@ const AccessForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    const typedName = name as keyof AccessFormData;
+    setFormData(prev => ({ ...prev, [typedName]: value } as AccessFormData));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

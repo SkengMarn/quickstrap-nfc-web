@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase, Wristband } from '../services/supabase'
-import { WristbandBulkUpload } from '../components/WristbandBulkUpload'
+import WristbandBulkUpload from '../components/WristbandBulkUpload'
 import {
   Edit,
   Trash2,
@@ -35,6 +35,19 @@ const WristbandsPage = () => {
       fetchWristbands(selectedEvent, selectedCategory, 1)
     }
   }, [selectedEvent, selectedCategory])
+
+  // Real-time search with debounce
+  useEffect(() => {
+    if (selectedEvent) {
+      const timeoutId = setTimeout(() => {
+        fetchWristbands(selectedEvent, selectedCategory, 1)
+        setPage(1) // Reset to first page when searching
+      }, 300) // 300ms debounce
+
+      return () => clearTimeout(timeoutId)
+    }
+    return undefined
+  }, [searchTerm, selectedEvent, selectedCategory])
   const fetchEvents = async () => {
     try {
       const { data, error } = await supabase
@@ -269,7 +282,7 @@ const WristbandsPage = () => {
               </div>
             ))}
           </div>
-        ) : wristbands.length > 0 ? (
+        ) : (
           <>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -308,40 +321,76 @@ const WristbandsPage = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {wristbands.map((wristband) => (
-                    <tr key={wristband.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {wristband.nfc_id}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {wristband.category}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${wristband.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
-                        >
-                          {wristband.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(wristband.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <Link
-                          to={`/wristbands/${wristband.id}/edit`}
-                          className="text-blue-600 hover:text-blue-900 mr-4"
-                        >
-                          <Edit size={16} />
-                        </Link>
-                        <button
-                          onClick={() => deleteWristband(wristband.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                  {wristbands.length > 0 ? (
+                    wristbands.map((wristband) => (
+                      <tr key={wristband.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {wristband.nfc_id}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {wristband.category}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${wristband.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
+                          >
+                            {wristband.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(wristband.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <Link
+                            to={`/wristbands/${wristband.id}/edit`}
+                            className="text-blue-600 hover:text-blue-900 mr-4"
+                          >
+                            <Edit size={16} />
+                          </Link>
+                          <button
+                            onClick={() => deleteWristband(wristband.id)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                        <div className="flex flex-col items-center">
+                          <Search className="w-8 h-8 text-gray-300 mb-2" />
+                          <p className="text-sm">
+                            {searchTerm || selectedCategory
+                              ? 'No wristbands found matching your search criteria'
+                              : 'No wristbands found for this event'}
+                          </p>
+                          {(searchTerm || selectedCategory) ? (
+                            <button
+                              onClick={() => {
+                                setSearchTerm('');
+                                setSelectedCategory(null);
+                                if (selectedEvent) {
+                                  fetchWristbands(selectedEvent, null, 1);
+                                }
+                              }}
+                              className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+                            >
+                              Clear search and filters
+                            </button>
+                          ) : (
+                            <Link
+                              to={`/wristbands/new?eventId=${selectedEvent}`}
+                              className="mt-2 inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200"
+                            >
+                              Add your first wristband
+                            </Link>
+                          )}
+                        </div>
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -390,20 +439,6 @@ const WristbandsPage = () => {
               </div>
             )}
           </>
-        ) : (
-          <div className="text-center py-8">
-            <p className="text-gray-500 text-sm">
-              {searchTerm || selectedCategory
-                ? 'No wristbands found matching your criteria'
-                : 'No wristbands found for this event'}
-            </p>
-            <Link
-              to={`/wristbands/new?eventId=${selectedEvent}`}
-              className="mt-2 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200"
-            >
-              Add your first wristband
-            </Link>
-          </div>
         )}
       </div>
     </div>

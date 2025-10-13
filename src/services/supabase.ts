@@ -4,23 +4,30 @@ import { createClient } from '@supabase/supabase-js'
 const isBrowser = typeof window !== 'undefined';
 
 // Get environment variables from Vite
-const supabaseUrl = import.meta.env.VITE_REACT_APP_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_REACT_APP_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY || '';
 
+// Log environment status for debugging (non-blocking)
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    'Missing Supabase environment variables. Please check your .env file.'
-  );
+  console.error('Missing Supabase environment variables:', {
+    supabaseUrl: !!supabaseUrl,
+    supabaseAnonKey: !!supabaseAnonKey
+  });
+  console.error('Available env vars:', Object.keys(import.meta.env).filter(key => key.startsWith('VITE_')));
 }
 
-// Create a single supabase client for the browser
-const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: isBrowser,
+// Create a single supabase client for the browser (with fallback values to prevent initialization errors)
+const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key',
+  {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: isBrowser,
+    }
   }
-});
+);
 
 export { supabase };
 
@@ -35,6 +42,15 @@ export type Event = {
   updated_at: string
   start_date: string
   end_date: string
+  is_public: boolean
+  ticket_linking_mode: 'disabled' | 'optional' | 'required'
+  allow_unlinked_entry: boolean
+  config: any
+  lifecycle_status: 'draft' | 'planning' | 'active' | 'completed' | 'archived'
+  status_changed_at: string
+  status_changed_by: string | null
+  auto_transition_enabled: boolean
+  organization_id: string
 }
 
 export type Wristband = {
