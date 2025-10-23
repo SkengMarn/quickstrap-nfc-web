@@ -51,11 +51,35 @@ const GateIntelligence: React.FC<GateIntelligenceProps> = ({ gate, onClose }) =>
 
       if (autoError) throw autoError;
 
+      // Fetch gate bindings to calculate category distribution
+      const { data: bindingsData } = await supabase
+        .from('gate_bindings')
+        .select('category, status, confidence, sample_count')
+        .eq('gate_id', gate.id);
+
       // Calculate real decision explanation based on actual data
       const spatialConsistency = performanceData?.health_score ? performanceData.health_score / 100 : 0.85;
       const sampleSize = Math.min(performanceData?.total_scans || 0, 500) / 500;
       const temporalStability = autonomousData?.success_rate || 0.9;
-      const categoryDistribution = 0.85; // Could be calculated from actual category data
+
+      // Calculate real category distribution from gate bindings
+      let categoryDistribution = 0;
+      if (bindingsData && bindingsData.length > 0) {
+        // Calculate average confidence from all bindings
+        const totalConfidence = bindingsData.reduce((sum, binding) => {
+          return sum + (Number(binding.confidence) || 0);
+        }, 0);
+        categoryDistribution = totalConfidence / bindingsData.length;
+
+        // Adjust based on enforcement status
+        const enforcedBindings = bindingsData.filter(b => b.status === 'enforced').length;
+        const totalBindings = bindingsData.length;
+        const enforcementRatio = totalBindings > 0 ? enforcedBindings / totalBindings : 0;
+        categoryDistribution = categoryDistribution * (0.5 + 0.5 * enforcementRatio);
+      } else {
+        // No bindings yet - use a low baseline
+        categoryDistribution = 0.3;
+      }
 
       const realDecisionExplanation: DecisionExplanation = {
         decision: autonomousData?.status || 'learning',

@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Download, AlertCircle, CheckCircle, X, Ticket } from 'lucide-react';
+import { AlertCircle, CheckCircle, Download, Ticket, Upload, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../services/supabase';
+import { sanitizeCSVCell, validateFileSize, validateFileType } from '../utils/inputSanitizer';
 
 interface TicketData {
   ticket_number: string;
@@ -43,7 +44,7 @@ const TicketUpload: React.FC<TicketUploadProps> = ({
   const parseCSV = (csvText: string): TicketData[] => {
     const lines = csvText.trim().split('\n');
     const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-    
+
     // Create a mapping of common field names to our expected format
     const fieldMapping: { [key: string]: string } = {
       'ticket number': 'ticket_number',
@@ -72,17 +73,17 @@ const TicketUpload: React.FC<TicketUploadProps> = ({
       'phone': 'holder_phone',
       'cellphone': 'holder_phone'
     };
-    
+
     // Map headers to our field names
     const mappedHeaders = headers.map(h => {
       const normalized = h.toLowerCase().trim();
       return fieldMapping[normalized] || normalized.replace(/\s+/g, '_');
     });
-    
+
     // Check if we have required fields
     const hasTicketNumber = mappedHeaders.includes('ticket_number');
     const hasTicketCategory = mappedHeaders.includes('ticket_category');
-    
+
     if (!hasTicketNumber) {
       throw new Error('CSV must contain a "ticket_number" or "Ticket Number" column');
     }
@@ -96,9 +97,9 @@ const TicketUpload: React.FC<TicketUploadProps> = ({
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue; // Skip empty lines
-      
-      const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, '')); // Remove quotes
-      
+
+      const values = line.split(',').map(v => sanitizeCSVCell(v.trim().replace(/^"|"$/g, ''))); // Remove quotes and sanitize
+
       if (values.length !== headers.length) {
         errors.push(`Row ${i + 1}: Column count mismatch (expected ${headers.length}, got ${values.length})`);
         continue;
@@ -114,12 +115,12 @@ const TicketUpload: React.FC<TicketUploadProps> = ({
         errors.push(`Row ${i + 1}: Missing ticket number`);
         continue;
       }
-      
+
       if (!ticket.ticket_category) {
         errors.push(`Row ${i + 1}: Missing ticket category`);
         continue;
       }
-      
+
       // Status is managed by database triggers, not uploaded
 
       tickets.push(ticket as TicketData);
@@ -133,9 +134,26 @@ const TicketUpload: React.FC<TicketUploadProps> = ({
   };
 
   const processFile = (selectedFile: File) => {
+    // Validate file type
     if (!selectedFile.name.endsWith('.csv')) {
       if (isMountedRef.current) {
         setErrorMessage('Please select a CSV file');
+      }
+      return;
+    }
+
+    // Validate MIME type
+    if (!validateFileType(selectedFile, ['text/csv', 'application/csv'])) {
+      if (isMountedRef.current) {
+        setErrorMessage('Invalid file type. Please select a valid CSV file.');
+      }
+      return;
+    }
+
+    // Validate file size (10MB limit)
+    if (!validateFileSize(selectedFile, 10 * 1024 * 1024)) {
+      if (isMountedRef.current) {
+        setErrorMessage('File too large. Maximum size is 10MB.');
       }
       return;
     }
@@ -188,7 +206,7 @@ const TicketUpload: React.FC<TicketUploadProps> = ({
 
     const files = Array.from(e.dataTransfer.files);
     const csvFile = files.find(file => file.name.endsWith('.csv'));
-    
+
     if (!csvFile) {
       setErrorMessage('Please drop a CSV file');
       return;
@@ -358,10 +376,10 @@ TICKET003,STAFF,Staff Member,staff@company.com,+256700000002`;
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Select CSV File
             </label>
-            <div 
+            <div
               className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md transition-colors ${
-                isDragOver 
-                  ? 'border-blue-400 bg-blue-50' 
+                isDragOver
+                  ? 'border-blue-400 bg-blue-50'
                   : 'border-gray-300 hover:border-gray-400'
               }`}
               onDragOver={handleDragOver}

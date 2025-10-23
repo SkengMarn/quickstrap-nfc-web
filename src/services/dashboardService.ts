@@ -371,9 +371,7 @@ export const subscribeToUpdates = (callback: (data: Partial<DashboardMetrics>) =
       }
     )
     .subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        console.log('Real-time subscription active');
-      }
+      // Real-time subscription status tracking
     });
 
   // Return unsubscribe function

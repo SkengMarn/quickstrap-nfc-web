@@ -4,16 +4,14 @@ import { supabase } from '../services/supabase';
 
 interface WristbandData {
   nfc_id: string;
-  wristband_number?: string;
   category: string;
-  color?: string;
-  batch_number?: string;
-  [key: string]: any;
 }
 
 interface WristbandBulkUploadProps {
   eventId: string;
   eventName?: string;
+  seriesId?: string;
+  isSeries?: boolean;
   onUploadComplete?: () => void;
   onClose?: () => void;
   className?: string;
@@ -22,6 +20,8 @@ interface WristbandBulkUploadProps {
 const WristbandBulkUpload: React.FC<WristbandBulkUploadProps> = ({ 
   eventId, 
   eventName,
+  seriesId,
+  isSeries = false,
   onUploadComplete, 
   onClose,
   className 
@@ -32,6 +32,7 @@ const WristbandBulkUpload: React.FC<WristbandBulkUploadProps> = ({
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [previewData, setPreviewData] = useState<WristbandData[]>([]);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [totalWristbands, setTotalWristbands] = useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Handle escape key to close modal
@@ -58,16 +59,10 @@ const WristbandBulkUpload: React.FC<WristbandBulkUploadProps> = ({
       'wristband id': 'nfc_id',
       'wristband_id': 'nfc_id',
       'id': 'nfc_id',
-      'wristband number': 'wristband_number',
-      'wristband_number': 'wristband_number',
-      'number': 'wristband_number',
       'category': 'category',
       'type': 'category',
       'access_level': 'category',
-      'color': 'color',
-      'batch': 'batch_number',
-      'batch_number': 'batch_number',
-      'batch number': 'batch_number'
+      'access level': 'category'
     };
     
     const mappedHeaders = headers.map(h => {
@@ -151,8 +146,10 @@ const WristbandBulkUpload: React.FC<WristbandBulkUploadProps> = ({
         const csvText = e.target?.result as string;
         const parsedData = parseCSV(csvText);
         setPreviewData(parsedData.slice(0, 5));
+        setTotalWristbands(parsedData.length);
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : 'Failed to parse CSV');
+        setTotalWristbands(0);
       }
     };
     reader.readAsText(selectedFile);
@@ -178,26 +175,24 @@ const WristbandBulkUpload: React.FC<WristbandBulkUploadProps> = ({
             return;
           }
 
-          // Store wristband inventory
-          const wristbandRecords = wristbands.map(wb => ({
-            event_id: eventId,
-            nfc_id: wb.nfc_id,
-            wristband_number: wb.wristband_number,
-            category: wb.category,
-            color: wb.color,
-            batch_number: wb.batch_number,
-            status: 'available', // available, assigned, lost, damaged
-            is_active: true,
-            metadata: {
-              // Store any additional fields
-              ...Object.keys(wb).reduce((acc, key) => {
-                if (!['nfc_id', 'wristband_number', 'category', 'color', 'batch_number'].includes(key)) {
-                  acc[key] = wb[key];
-                }
-                return acc;
-              }, {} as any)
+          // Store wristband inventory (only fields that exist in schema)
+          // For series events: event_id = parent event ID, series_id = series ID
+          // For regular events: event_id = event ID, series_id = null
+          const wristbandRecords = wristbands.map(wb => {
+            const record: any = {
+              event_id: eventId, // Always the parent event ID (from events table)
+              nfc_id: wb.nfc_id,
+              category: wb.category || 'General',
+              is_active: true
+            };
+            
+            // If this is a series event, set the series_id field
+            if (isSeries && seriesId) {
+              record.series_id = seriesId; // Series ID (from event_series table)
             }
-          }));
+            
+            return record;
+          });
 
           // Insert wristband records
           const { error } = await supabase
@@ -205,6 +200,16 @@ const WristbandBulkUpload: React.FC<WristbandBulkUploadProps> = ({
             .insert(wristbandRecords);
 
           if (error) {
+            // Handle duplicate NFC ID error with a friendly message
+            if (error.code === '23505' && error.message.includes('nfc_id')) {
+              const match = error.details?.match(/Key \(nfc_id\)=\(([^)]+)\)/);
+              const duplicateId = match ? match[1] : 'unknown';
+              throw new Error(`Duplicate NFC ID found: "${duplicateId}" already exists in the database. Please remove duplicates from your CSV or check if these wristbands were already uploaded.`);
+            }
+            // Handle foreign key constraint error
+            if (error.code === '23503' && error.message.includes('event_id')) {
+              throw new Error(`Invalid event reference. This event may not exist or you may not have permission to add wristbands to it.`);
+            }
             throw error;
           }
 
@@ -232,12 +237,17 @@ const WristbandBulkUpload: React.FC<WristbandBulkUploadProps> = ({
   };
 
   const downloadTemplate = () => {
-    const template = `NFC ID,Wristband Number,Category,Color,Batch Number
-NFC001,WB001,VIP,Gold,BATCH001
-NFC002,WB002,Regular,Blue,BATCH001
-NFC003,WB003,Staff,Green,BATCH002
-NFC004,WB004,Press,Red,BATCH002
-NFC005,WB005,VIP,Gold,BATCH001`;
+    const template = `NFC ID,Category
+NFC001,VIP
+NFC002,General
+NFC003,Staff
+NFC004,Press
+NFC005,VIP
+NFC006,General
+NFC007,Staff
+NFC008,VIP
+NFC009,General
+NFC010,Staff`;
 
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
@@ -262,10 +272,13 @@ NFC005,WB005,VIP,Gold,BATCH001`;
                 </span>
               )}
             </div>
-            <p className="text-sm text-purple-600">
+            <p className="text-sm text-purple-600 mb-2">
               Upload your physical wristband inventory with NFC IDs. These are the actual wristbands 
-              you'll distribute to guests at the event{eventName ? ` "${eventName}"` : ''}.
+              you'll distribute to guests {isSeries ? 'for this series event' : 'at the event'}{eventName ? ` "${eventName}"` : ''}.
             </p>
+            <div className="text-xs text-purple-700 bg-purple-100 rounded px-3 py-2">
+              <strong>Simple Format:</strong> Only 2 columns required - <code className="bg-purple-200 px-1 rounded">NFC ID</code> and <code className="bg-purple-200 px-1 rounded">Category</code>
+            </div>
           </div>
 
       {/* Template Download & Required Fields - Compact Layout */}
@@ -322,9 +335,34 @@ NFC005,WB005,VIP,Gold,BATCH001`;
           </div>
         </div>
         {file && (
-          <p className="mt-2 text-sm text-gray-600">
-            Selected: {file.name} ({(file.size / 1024).toFixed(1)} KB)
-          </p>
+          <div className="mt-2 flex items-center justify-between bg-gray-50 border border-gray-200 rounded-md p-2">
+            <div className="flex-1">
+              <p className="text-sm text-gray-600">
+                Selected: <span className="font-medium">{file.name}</span> ({(file.size / 1024).toFixed(1)} KB)
+              </p>
+              {totalWristbands > 0 && (
+                <p className="text-xs text-purple-600 font-medium mt-1">
+                  📦 {totalWristbands} wristband{totalWristbands !== 1 ? 's' : ''} ready to upload
+                </p>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                setFile(null);
+                setPreviewData([]);
+                setValidationErrors([]);
+                setErrorMessage('');
+                setTotalWristbands(0);
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = '';
+                }
+              }}
+              className="text-gray-400 hover:text-red-600 transition-colors ml-3"
+              title="Remove file"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         )}
       </div>
 
@@ -353,26 +391,33 @@ NFC005,WB005,VIP,Gold,BATCH001`;
       {/* Preview - Compact */}
       {previewData.length > 0 && validationErrors.length === 0 && (
         <div>
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Preview (first 3 wristbands)</h3>
+          <h3 className="text-sm font-medium text-gray-700 mb-2">Preview (first 5 wristbands)</h3>
           <div className="overflow-x-auto">
             <table className="min-w-full text-xs">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-2 py-1 text-left">NFC ID</th>
-                  <th className="px-2 py-1 text-left">Category</th>
-                  <th className="px-2 py-1 text-left">Color</th>
+                  <th className="px-3 py-2 text-left font-semibold">NFC ID</th>
+                  <th className="px-3 py-2 text-left font-semibold">Category</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
-                {previewData.slice(0, 3).map((wb, index) => (
-                  <tr key={index}>
-                    <td className="px-2 py-1 font-mono">{wb.nfc_id}</td>
-                    <td className="px-2 py-1">{wb.category}</td>
-                    <td className="px-2 py-1">{wb.color || '—'}</td>
+              <tbody className="divide-y divide-gray-200 bg-white">
+                {previewData.slice(0, 5).map((wb, index) => (
+                  <tr key={index} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 font-mono text-blue-600">{wb.nfc_id}</td>
+                    <td className="px-3 py-2">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                        {wb.category}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {previewData.length > 5 && (
+              <p className="text-xs text-gray-500 mt-2">
+                ... and {previewData.length - 5} more wristbands
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -397,7 +442,7 @@ NFC005,WB005,VIP,Gold,BATCH001`;
             <div className="ml-2">
               <h3 className="text-sm font-medium text-green-800">Success!</h3>
               <p className="mt-1 text-xs text-green-700">
-                Wristband inventory uploaded successfully.
+                {totalWristbands} wristband{totalWristbands !== 1 ? 's' : ''} uploaded successfully.
               </p>
             </div>
           </div>

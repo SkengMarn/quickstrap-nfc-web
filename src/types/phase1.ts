@@ -93,36 +93,53 @@ export interface OrganizationMember {
 }
 
 export interface OrganizationSettings {
-  id: string;
-  organization_id: string;
+  id?: string;
+  organization_id?: string;
+
+  // Branding (optional)
+  branding?: {
+    primary_color: string;
+    secondary_color: string;
+    logo_url: string | null;
+  };
 
   // Feature flags
-  features: {
-    fraud_detection: boolean;
-    ai_insights: boolean;
-    api_access: boolean;
-    white_label: boolean;
-    custom_workflows: boolean;
+  features?: {
+    fraud_detection?: boolean;
+    ai_insights?: boolean;
+    api_access?: boolean;
+    white_label?: boolean;
+    custom_workflows?: boolean;
+    analytics_enabled?: boolean;
   };
 
   // Notification preferences
-  notifications: {
-    email_enabled: boolean;
-    sms_enabled: boolean;
-    push_enabled: boolean;
+  notifications?: {
+    email_enabled?: boolean;
+    sms_enabled?: boolean;
+    push_enabled?: boolean;
+    webhook_url?: string | null;
   };
 
+  // Integrations (optional)
+  integrations?: Record<string, any>;
+
   // Security
-  require_2fa: boolean;
-  allowed_ip_ranges: string[] | null;
-  session_timeout_minutes: number;
+  security?: {
+    two_factor_required?: boolean;
+    session_timeout_minutes?: number;
+    allowed_domains?: string[];
+  };
+  require_2fa?: boolean;
+  allowed_ip_ranges?: string[] | null;
+  session_timeout_minutes?: number;
 
   // Data retention
-  data_retention_days: number;
-  auto_archive_enabled: boolean;
+  data_retention_days?: number;
+  auto_archive_enabled?: boolean;
 
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // ============================================================================

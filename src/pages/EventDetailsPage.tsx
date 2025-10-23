@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase, Event } from '../services/supabase'
-import { Edit, Users, RefreshCw, Activity, TrendingUp, AlertTriangle, CheckCircle, Clock, MapPin, Shield, Zap, Search, Filter, Download, Upload, MoreVertical, Trash2, Eye, Link as LinkIcon, Unlink, XCircle, LogOut, ChevronUp, ChevronDown } from 'lucide-react'
+import { Edit, Users, RefreshCw, Activity, TrendingUp, AlertTriangle, CheckCircle, Clock, MapPin, Shield, Zap, Search, Filter, Download, Upload, MoreVertical, Trash2, Eye, Link as LinkIcon, Unlink, XCircle, LogOut, ChevronUp, ChevronDown, X } from 'lucide-react'
 import { enrichAccessWithProfiles } from '../utils/accessEnrichment'
 import LoadingScreen from '../components/common/LoadingScreen'
 import GuestListUpload from '../components/GuestListUpload'
@@ -44,8 +44,8 @@ const EventDetailsPage = () => {
   const [showWristbandUpload, setShowWristbandUpload] = useState(false)
   const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [systemAlerts, setSystemAlerts] = useState<any[]>([])
-  const [gateHealth, setGateHealth] = useState(92)
-  const [securityScore, setSecurityScore] = useState(98)
+  const [gateHealth, setGateHealth] = useState(0)
+  const [securityScore, setSecurityScore] = useState(0)
   
   // Guest List / Tickets state
   const [tickets, setTickets] = useState<any[]>([])
@@ -75,15 +75,26 @@ const EventDetailsPage = () => {
   const fetchTickets = async (eventId: string) => {
     setTicketsLoading(true)
     try {
-      const { data, error } = await supabase
+      // Determine if this is a series event by checking the event object
+      const isSeries = (event as any)?.is_series || false;
+      
+      let query = supabase
         .from('tickets')
         .select(`
           *,
           event:events(id, name),
           wristband:wristbands!tickets_linked_wristband_id_fkey(id, nfc_id, category)
-        `)
-        .eq('event_id', eventId)
-        .order(ticketSortField, { ascending: ticketSortDirection === 'asc' })
+        `);
+      
+      if (isSeries) {
+        // For series: get tickets with this series_id
+        query = query.eq('series_id', eventId);
+      } else {
+        // For parent event: get tickets with this event_id but NO series_id
+        query = query.eq('event_id', eventId).is('series_id', null);
+      }
+      
+      const { data, error } = await query.order(ticketSortField, { ascending: ticketSortDirection === 'asc' });
 
       if (error) throw error
       setTickets(data || [])
@@ -112,26 +123,90 @@ const EventDetailsPage = () => {
   const fetchEventDetails = async (eventId: string) => {
     setLoading(true)
     try {
-      // Fetch event details
-      const { data: eventData, error: eventError } = await supabase
+      // Try to fetch from events table first
+      let { data: eventData, error: eventError } = await supabase
         .from('events')
         .select('*')
         .eq('id', eventId)
-        .single()
-      if (eventError) throw eventError
+        .maybeSingle()
+      
+      // If not found in events, try event_series table
+      if (!eventData) {
+        const { data: seriesData, error: seriesError } = await supabase
+          .from('event_series')
+          .select('*')
+          .eq('id', eventId)
+          .maybeSingle()
+        
+        if (seriesError) throw seriesError
+        
+        if (seriesData) {
+          // Convert series data to event format
+          eventData = {
+            id: seriesData.id,
+            name: seriesData.name,
+            description: seriesData.description,
+            location: seriesData.location,
+            start_date: seriesData.start_date,
+            end_date: seriesData.end_date,
+            capacity: seriesData.capacity,
+            is_active: seriesData.lifecycle_status === 'active',
+            is_public: seriesData.is_public,
+            organization_id: seriesData.organization_id,
+            lifecycle_status: seriesData.lifecycle_status,
+            ticket_linking_mode: null,
+            allow_unlinked_entry: true,
+            created_by: seriesData.created_by,
+            created_at: seriesData.created_at,
+            updated_at: seriesData.updated_at,
+            config: seriesData.config,
+            // Add series-specific fields
+            main_event_id: seriesData.main_event_id,
+            sequence_number: seriesData.sequence_number,
+            series_type: seriesData.series_type,
+            is_series: true
+          } as any
+        }
+      }
+      
+      if (!eventData) {
+        throw new Error('Event not found')
+      }
+      
       setEvent(eventData)
+      
       // Fetch wristbands stats
-      const { data: wristbands, error: wristbandsError } = await supabase
+      // For series events: filter by series_id
+      // For parent events: filter by event_id AND series_id IS NULL (exclude series wristbands)
+      const isSeries = (eventData as any).is_series;
+      let wristbandsQuery = supabase
         .from('wristbands')
-        .select('id, category, is_active')
-        .eq('event_id', eventId)
+        .select('id, category, is_active');
+      
+      if (isSeries) {
+        // Series event: get wristbands with this series_id
+        wristbandsQuery = wristbandsQuery.eq('series_id', eventId);
+      } else {
+        // Parent event: get wristbands with this event_id but NO series_id
+        wristbandsQuery = wristbandsQuery.eq('event_id', eventId).is('series_id', null);
+      }
+      
+      const { data: wristbands, error: wristbandsError } = await wristbandsQuery;
       if (wristbandsError) throw wristbandsError
 
       // Fetch check-in logs
-      const { data: checkins, error: checkinsError } = await supabase
+      // For series: filter by series_id; for parent: filter by event_id AND series_id IS NULL
+      let checkinsQuery = supabase
         .from('checkin_logs')
-        .select('wristband_id')
-        .eq('event_id', eventId)
+        .select('wristband_id');
+      
+      if (isSeries) {
+        checkinsQuery = checkinsQuery.eq('series_id', eventId);
+      } else {
+        checkinsQuery = checkinsQuery.eq('event_id', eventId).is('series_id', null);
+      }
+      
+      const { data: checkins, error: checkinsError } = await checkinsQuery;
       if (checkinsError) throw checkinsError
 
       // Calculate stats
@@ -192,6 +267,7 @@ const EventDetailsPage = () => {
       ])
     } catch (error) {
       console.error('Error fetching event details:', error)
+      console.error('Event ID attempted:', eventId)
       const errorMessage = error instanceof Error ? error.message : 'Failed to load event details'
       setError(errorMessage)
     } finally {
@@ -252,33 +328,50 @@ const EventDetailsPage = () => {
 
   const fetchGateMetrics = async (eventId: string) => {
     try {
-      // Calculate gate health based on active gates
+      // Calculate gate health based on active gates from database
       const { data: gates, error } = await supabase
         .from('gates')
-        .select('health_score, status')
+        .select('id, status, health_score')
         .eq('event_id', eventId)
-
-      if (error) throw error
 
       if (gates && gates.length > 0) {
         const activeGates = gates.filter(g => g.status === 'active')
-        const avgHealth = activeGates.reduce((sum, gate) => sum + (gate.health_score || 100), 0) / activeGates.length
-        setGateHealth(Math.round(avgHealth))
+        if (activeGates.length > 0) {
+          const avgHealth = activeGates.reduce((sum, gate) => sum + (gate.health_score || 0), 0) / activeGates.length
+          setGateHealth(Math.round(avgHealth))
+        } else {
+          setGateHealth(0)
+        }
+      } else {
+        setGateHealth(0)
       }
 
-      // Security score based on fraud alerts
+      // Security score based on fraud alerts from database
       const { data: fraudAlerts, error: fraudError } = await supabase
         .from('fraud_detections')
-        .select('severity')
+        .select('id, severity')
         .eq('event_id', eventId)
 
       if (!fraudError && fraudAlerts) {
         const criticalAlerts = fraudAlerts.filter(f => f.severity === 'critical').length
-        const securityScore = Math.max(70, 100 - (criticalAlerts * 5))
-        setSecurityScore(securityScore)
+        const highAlerts = fraudAlerts.filter(f => f.severity === 'high').length
+        const mediumAlerts = fraudAlerts.filter(f => f.severity === 'medium').length
+        
+        // Calculate security score: start at 100, deduct based on severity
+        let score = 100
+        score -= (criticalAlerts * 10)  // -10 per critical
+        score -= (highAlerts * 5)       // -5 per high
+        score -= (mediumAlerts * 2)     // -2 per medium
+        
+        setSecurityScore(Math.max(0, score))
+      } else {
+        // No fraud alerts = perfect security score
+        setSecurityScore(100)
       }
     } catch (error) {
       console.error('Error fetching gate metrics:', error)
+      setGateHealth(0)
+      setSecurityScore(0)
     }
   }
 
@@ -640,7 +733,11 @@ const EventDetailsPage = () => {
                     </div>
                     <div className="mt-4 pt-4 border-t">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-500">Showing last 50 activities</span>
+                        <span className="text-gray-500">
+                          {recentActivity.length > 0 
+                            ? `Showing last ${recentActivity.length} ${recentActivity.length === 1 ? 'activity' : 'activities'}`
+                            : 'No activities yet'}
+                        </span>
                         <button className="text-blue-600 hover:text-blue-800 font-medium">
                           View All
                         </button>
@@ -884,13 +981,6 @@ const EventDetailsPage = () => {
                 </div>
                 <div className="flex space-x-3">
                   <button
-                    onClick={() => setShowGuestListUpload(true)}
-                    className="btn btn-secondary"
-                  >
-                    <Users className="h-4 w-4 mr-2" />
-                    Upload Tickets
-                  </button>
-                  <button
                     onClick={() => setShowWristbandUpload(true)}
                     className="btn btn-primary"
                   >
@@ -1076,7 +1166,11 @@ const EventDetailsPage = () => {
               </div>
               
               {/* Enhanced Wristband Manager */}
-              <EnhancedWristbandManager eventId={event.id} />
+              <EnhancedWristbandManager 
+                eventId={(event as any).is_series ? (event as any).main_event_id : event.id}
+                isSeries={(event as any).is_series || false}
+                seriesId={(event as any).is_series ? event.id : undefined}
+              />
             </div>
           )}
           {activeTab === 'access' && (
@@ -1712,17 +1806,30 @@ const EventDetailsPage = () => {
 
           {/* Fraud Detection Tab */}
           {activeTab === 'fraud' && event && (
-            <FraudDetectionSystem eventId={event.id} />
+            <FraudDetectionSystem 
+              eventId={(event as any).is_series ? (event as any).main_event_id : event.id}
+              isSeries={(event as any).is_series || false}
+              seriesId={(event as any).is_series ? event.id : undefined}
+            />
           )}
 
           {/* Analytics Tab */}
           {activeTab === 'analytics' && event && (
-            <EnhancedAnalyticsDashboard eventId={event.id} />
+            <EnhancedAnalyticsDashboard 
+              eventId={(event as any).is_series ? (event as any).main_event_id : event.id}
+              isSeries={(event as any).is_series || false}
+              seriesId={(event as any).is_series ? event.id : undefined}
+            />
           )}
 
           {/* Export Tab */}
           {activeTab === 'export' && event && (
-            <ExportReportingSystem eventId={event.id} eventName={event.name} />
+            <ExportReportingSystem 
+              eventId={(event as any).is_series ? (event as any).main_event_id : event.id}
+              eventName={event.name}
+              isSeries={(event as any).is_series || false}
+              seriesId={(event as any).is_series ? event.id : undefined}
+            />
           )}
 
           {/* Emergency Tab */}
@@ -1940,13 +2047,37 @@ const EventDetailsPage = () => {
 
       {/* Wristband Inventory Upload Modal */}
       {showWristbandUpload && event && (
-        <WristbandBulkUpload
-          eventId={event.id}
-          onUploadComplete={() => {
-            fetchEventDetails(id!);
-          }}
-          onClose={() => setShowWristbandUpload(false)}
-        />
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Upload Wristband Inventory</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {(event as any).is_series ? 'Upload wristbands for this series event' : 'Upload wristbands for this event'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowWristbandUpload(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            <div className="p-6">
+              <WristbandBulkUpload
+                eventId={(event as any).is_series ? (event as any).main_event_id : event.id}
+                eventName={event.name}
+                seriesId={(event as any).is_series ? event.id : undefined}
+                isSeries={(event as any).is_series || false}
+                onUploadComplete={() => {
+                  fetchEventDetails(id!);
+                  setShowWristbandUpload(false);
+                }}
+                onClose={() => setShowWristbandUpload(false)}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Ticket Upload Modal */}
@@ -1969,9 +2100,12 @@ const EventDetailsPage = () => {
             </div>
             <div className="p-6">
               <TicketCSVUpload
-                eventId={event.id}
+                eventId={(event as any).is_series ? (event as any).main_event_id : event.id}
+                eventName={event.name}
+                seriesId={(event as any).is_series ? event.id : undefined}
+                isSeries={(event as any).is_series || false}
                 onUploadComplete={() => {
-                  fetchTickets(event.id);
+                  fetchEventDetails(id!);
                   setShowTicketUploadModal(false);
                 }}
                 onClose={() => setShowTicketUploadModal(false)}

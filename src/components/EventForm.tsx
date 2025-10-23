@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { supabase } from '../services/supabase';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import notification from '../utils/notifications';
 import { useOrganization } from '../contexts/OrganizationContext';
+import { supabase } from '../services/supabase';
+import { csrfProtection } from '../utils/csrfProtection';
+import notification from '../utils/notifications';
 
 interface EventFormData {
   name: string;
@@ -13,9 +14,11 @@ interface EventFormData {
   end_date: string;
   location: string;
   is_public: boolean;
-  total_capacity: number;
+  capacity: number;
   ticket_linking_mode: 'disabled' | 'optional' | 'required';
   allow_unlinked_entry: boolean;
+  is_active: boolean;
+  lifecycle_status: 'draft' | 'active' | 'completed' | 'cancelled' | 'archived';
 }
 
 const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
@@ -23,6 +26,7 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
   const navigate = useNavigate();
   const { currentOrganization } = useOrganization();
   const [loading, setLoading] = useState(false);
+  const [originalData, setOriginalData] = useState<EventFormData | null>(null);
   const [formData, setFormData] = useState<EventFormData>({
     name: '',
     description: '',
@@ -30,9 +34,11 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
     end_date: '',
     location: '',
     is_public: false,
-    total_capacity: 0,
+    capacity: 0,
     ticket_linking_mode: 'disabled',
     allow_unlinked_entry: true,
+    is_active: false,
+    lifecycle_status: 'draft',
   });
 
   useEffect(() => {
@@ -48,18 +54,23 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
         .eq('id', id)
         .single();
       if (error) throw error;
-      if (data) setFormData(prev => ({
-        ...prev,
-        name: data.name || '',
-        description: data.description || '',
-        location: data.location || '',
-        is_public: data.is_public || false,
-        total_capacity: data.total_capacity || 0,
-        ticket_linking_mode: data.ticket_linking_mode || 'disabled',
-        allow_unlinked_entry: data.allow_unlinked_entry !== false, // Default to true if not set
-        start_date: data.start_date ? new Date(data.start_date).toISOString().slice(0, 16) : '',
-        end_date: data.end_date ? new Date(data.end_date).toISOString().slice(0, 16) : ''
-      }));
+      if (data) {
+        const loadedData = {
+          name: data.name || '',
+          description: data.description || '',
+          location: data.location || '',
+          is_public: data.is_public || false,
+          capacity: data.capacity || 0,
+          ticket_linking_mode: data.ticket_linking_mode || 'disabled',
+          allow_unlinked_entry: data.allow_unlinked_entry !== false,
+          is_active: data.is_active || false,
+          lifecycle_status: data.lifecycle_status || 'draft',
+          start_date: data.start_date ? new Date(data.start_date).toISOString().slice(0, 16) : '',
+          end_date: data.end_date ? new Date(data.end_date).toISOString().slice(0, 16) : ''
+        };
+        setFormData(loadedData);
+        setOriginalData(loadedData); // Store original for comparison
+      }
     } catch (error) {
       console.error('Error:', error);
       toast.error('Failed to load event');
@@ -68,18 +79,24 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
     }
   };
 
+  // Check if form has changes
+  const hasChanges = () => {
+    if (!isEdit || !originalData) return true;
+    return JSON.stringify(formData) !== JSON.stringify(originalData);
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target as HTMLInputElement;
-    
-    let newValue = type === 'checkbox' 
-      ? (e.target as HTMLInputElement).checked 
-      : type === 'number' 
+
+    let newValue = type === 'checkbox'
+      ? (e.target as HTMLInputElement).checked
+      : type === 'number'
         ? parseInt(value) || 0
         : value;
 
     setFormData(prev => {
       const updated = { ...prev, [name]: newValue };
-      
+
       // Handle ticket linking mode logic to prevent conflicts
       if (name === 'ticket_linking_mode') {
         if (value === 'disabled') {
@@ -91,14 +108,21 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
         }
         // For 'optional', leave allow_unlinked_entry as user preference
       }
-      
+
       return updated;
     });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    // CSRF Protection
+    const csrfToken = csrfProtection.getToken();
+    if (!csrfToken) {
+      notification.error('Security token missing. Please refresh the page and try again.');
+      return;
+    }
+
     // Validate required fields with notifications
     if (!formData.name) {
       notification.error('Please provide a name for the event', undefined, {
@@ -151,16 +175,17 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
       return;
     }
 
-    // Validate date range
+    // Validate date range using the new validation rules
     const startDate = new Date(formData.start_date);
     const endDate = new Date(formData.end_date);
-    
+
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      notification.error('Please enter valid dates in the correct format', undefined, {
+      notification.error('Invalid date format', undefined, {
         origin: 'app',
         context: {
           entity: 'event',
-          operation: 'create',
+          operation: isEdit ? 'update' : 'create',
+          validation: 'date_format',
           technicalDetails: 'Validation failed: Invalid date format'
         },
         toastOptions: {
@@ -169,20 +194,33 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
       });
       return;
     }
-    
-    if (endDate <= startDate) {
-      notification.error('End date must be after the start date', {
-        origin: 'app',
-        context: {
-          entity: 'event',
-          operation: 'create',
-          technicalDetails: 'Validation failed: Invalid date range',
-          showInUI: true,
-          logToConsole: true
-        }
-      });
-      return;
+
+    // Start date cannot be in the past (only for new events)
+    if (!isEdit) {
+      const now = new Date();
+      const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
+
+      if (startDate < oneMinuteAgo) {
+        notification.error('Start date cannot be in the past', undefined, {
+          origin: 'app',
+          context: {
+            entity: 'event',
+            operation: 'create',
+            validation: 'past_date',
+            technicalDetails: 'Validation failed: Start date is in the past',
+            showInUI: true,
+            logToConsole: true
+          },
+          toastOptions: {
+            autoClose: 5000
+          }
+        });
+        return;
+      }
     }
+
+    // Note: We no longer enforce that end_date must be after start_date
+    // This is intentionally flexible per the specification
 
     setLoading(true);
     try {
@@ -194,8 +232,8 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
 
       const { data, error } = isEdit && id
         ? await supabase.from('events').update(eventData).eq('id', id).select()
-        : await supabase.from('events').insert([{ 
-            ...eventData, 
+        : await supabase.from('events').insert([{
+            ...eventData,
             created_by: (await supabase.auth.getUser()).data.user?.id,
             organization_id: currentOrganization?.id
           }]).select();
@@ -212,7 +250,7 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
           throw error;
         }
       }
-      
+
       // Only proceed with navigation if the operation was successful
       if (data && data.length > 0) {
         if (isEdit) {
@@ -234,8 +272,8 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
         }
         // Add a small delay to ensure the notification is visible before navigating
         setTimeout(() => {
-          navigate('/events', { 
-            state: { 
+          navigate('/events', {
+            state: {
               message: `Event "${formData.name}" successfully ${isEdit ? 'updated' : 'created'}`,
               timestamp: Date.now()
             }
@@ -248,11 +286,11 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
       let errorMessage = 'An unknown error occurred';
       let errorCode = '';
       let errorStack: string | undefined;
-      
+
       if (error instanceof Error) {
         errorMessage = error.message;
         errorStack = process.env.NODE_ENV === 'development' ? error.stack : undefined;
-        
+
         // Handle specific Supabase errors
         if ('code' in error) {
           errorCode = String(error.code);
@@ -273,17 +311,17 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
       } else if (error && typeof error === 'object' && 'message' in error) {
         errorMessage = String(error.message);
       }
-      
+
       // Log detailed error to console in development
       if (process.env.NODE_ENV === 'development') {
-        console.error('Event operation error:', { 
-          error, 
+        console.error('Event operation error:', {
+          error,
           message: errorMessage,
           code: errorCode,
-          stack: errorStack 
+          stack: errorStack
         });
       }
-      
+
       // Show user-friendly error notification
       const errorMessageText = `Could not ${isEdit ? 'update' : 'create'} event: ${errorMessage}`;
       notification.error(errorMessageText, {
@@ -309,7 +347,7 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
     <div className="max-w-3xl mx-auto p-6">
       <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-lg shadow">
         <h2 className="text-xl font-semibold">{isEdit ? 'Edit Event' : 'New Event'}</h2>
-        
+
         <div>
           <label className="block text-sm font-medium mb-1">Event Name *</label>
           <input
@@ -341,9 +379,13 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
               name="start_date"
               value={formData.start_date}
               onChange={handleChange}
+              min={!isEdit ? new Date(Date.now() - 60 * 1000).toISOString().slice(0, 16) : undefined}
               className="w-full p-2 border rounded"
               required
             />
+            {!isEdit && (
+              <p className="text-xs text-gray-500 mt-1">Start date cannot be in the past</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">End Date/Time *</label>
@@ -351,11 +393,11 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
               type="datetime-local"
               name="end_date"
               value={formData.end_date}
-              min={formData.start_date}
               onChange={handleChange}
               className="w-full p-2 border rounded"
               required
             />
+            <p className="text-xs text-gray-500 mt-1">End date can be before or after start date (flexible)</p>
           </div>
         </div>
 
@@ -384,20 +426,22 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
         {/* Advanced Configuration Section */}
         <div className="border-t pt-6">
           <h3 className="text-lg font-medium mb-4">Event Configuration</h3>
-          
+
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">Total Capacity</label>
               <input
                 type="number"
-                name="total_capacity"
-                value={formData.total_capacity}
+                name="capacity"
+                value={formData.capacity || 0}
                 onChange={handleChange}
                 className="w-full p-2 border rounded"
                 min="0"
                 placeholder="0 = unlimited"
               />
-              <p className="text-xs text-gray-500 mt-1">Set to 0 for unlimited capacity</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {formData.capacity > 0 ? `Capacity: ${formData.capacity.toLocaleString()}` : 'Unlimited capacity'}
+              </p>
             </div>
 
             <div>
@@ -439,7 +483,71 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
           )}
         </div>
 
+        {/* Event Status Section */}
+        <div className="border-t pt-6">
+          <h3 className="text-lg font-medium mb-4">Event Status</h3>
+          
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Lifecycle Status</label>
+              <select
+                name="lifecycle_status"
+                value={formData.lifecycle_status}
+                onChange={handleChange}
+                className="w-full p-2 border rounded"
+              >
+                <option value="draft">Draft - Not visible to public</option>
+                <option value="active">Active - Event is live</option>
+                <option value="completed">Completed - Event has ended</option>
+                <option value="cancelled">Cancelled - Event cancelled</option>
+                <option value="archived">Archived - Historical record</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Current: <span className="font-semibold capitalize">{formData.lifecycle_status}</span>
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Active Status</label>
+              <div className="flex items-center space-x-4 p-3 border rounded bg-gray-50">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    name="is_active"
+                    checked={formData.is_active === true}
+                    onChange={() => setFormData(prev => ({ ...prev, is_active: true }))}
+                    className="mr-2"
+                  />
+                  <span className="text-sm">Active</span>
+                </label>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    name="is_active"
+                    checked={formData.is_active === false}
+                    onChange={() => setFormData(prev => ({ ...prev, is_active: false }))}
+                    className="mr-2"
+                  />
+                  <span className="text-sm">Inactive</span>
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {formData.is_active ? '✅ Event is currently active' : '⏸️ Event is currently inactive'}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
+            <p className="text-sm text-blue-900">
+              <strong>Note:</strong> Changing status to "Active" and enabling "is_active" will make the event visible and operational.
+            </p>
+          </div>
+        </div>
+
         <div className="flex justify-end space-x-3 pt-4">
+          {/* CSRF Token */}
+          <input type="hidden" name="csrf_token" value={csrfProtection.getToken()} />
+
           <button
             type="button"
             onClick={() => navigate(-1)}
@@ -451,7 +559,7 @@ const EventForm: React.FC<{ isEdit?: boolean }> = ({ isEdit = false }) => {
           <button
             type="submit"
             className="px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
-            disabled={loading}
+            disabled={loading || (isEdit && !hasChanges())}
           >
             {loading ? 'Saving...' : 'Save Event'}
           </button>

@@ -157,7 +157,7 @@ export class AutonomousService {
       return (data || []).map((ag: any) => ({
         id: ag.id,
         name: ag.gate?.name || 'Unknown Gate',
-        location: 'Gate Location', // TODO: Add location field to gates table if needed
+        location: ag.gate?.location || 'Unknown Location',
         status: ag.status as any,
         confidence_score: Number(ag.confidence_score) || 0,
         last_decision: ag.last_decision_at || new Date().toISOString(),
@@ -333,6 +333,35 @@ export class AutonomousService {
     }
   }
 
+  // Fetch recent autonomous events
+  async fetchRecentEvents(limit: number = 10): Promise<AutoEvent[]> {
+    try {
+      const { data, error } = await supabase
+        .from('autonomous_events')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error) throw error;
+
+      return (data || []).map((event: any) => ({
+        id: event.id,
+        type: event.event_type,
+        timestamp: event.created_at,
+        confidence: Number(event.confidence_score) || 0,
+        details: {
+          action: event.action,
+          reasoning: event.reasoning || '',
+          impact: event.impact || '',
+          metadata: event.metadata || {}
+        }
+      }));
+    } catch (error) {
+      console.error('Error fetching recent events:', error);
+      return [];
+    }
+  }
+
   // Fetch predictive insights
   async fetchPredictiveInsights(): Promise<PredictiveInsight[]> {
     try {
@@ -434,74 +463,8 @@ export class AutonomousService {
     }
   }
 
-  // Generate live autonomous event (for demo/testing - inserts real event)
-  async generateLiveEvent(): Promise<AutoEvent> {
-    const events = [
-      {
-        type: 'gate_creation' as const,
-        action: 'Created new gate at South Entrance',
-        reasoning: 'Detected queue buildup and optimal placement location',
-        impact: 'Reduced average wait time by 23%'
-      },
-      {
-        type: 'threshold_adjustment' as const,
-        action: 'Adjusted duplicate detection threshold to 20m',
-        reasoning: 'Analysis showed 15m was too restrictive for this venue layout',
-        impact: 'Improved accuracy by 8%'
-      },
-      {
-        type: 'performance_optimization' as const,
-        action: 'Optimized gate processing algorithm',
-        reasoning: 'Identified bottleneck in validation step',
-        impact: 'Reduced average processing time by 15%'
-      }
-    ];
-
-    const event = events[Math.floor(Math.random() * events.length)];
-    const confidence = 0.85 + Math.random() * 0.15;
-
-    // Insert into database (requires organization context)
-    try {
-      const { data: orgData } = await supabase
-        .from('organization_members')
-        .select('organization_id')
-        .limit(1)
-        .single();
-
-      if (orgData) {
-        await supabase.from('autonomous_events').insert({
-          organization_id: orgData.organization_id,
-          event_type: event.type,
-          action: event.action,
-          reasoning: event.reasoning,
-          impact: event.impact,
-          confidence_score: confidence,
-          metadata: {
-            automated: true,
-            requires_review: false
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error inserting generated event:', error);
-    }
-
-    return {
-      id: `auto-${Date.now()}`,
-      type: event.type,
-      timestamp: new Date().toISOString(),
-      confidence,
-      details: {
-        action: event.action,
-        reasoning: event.reasoning,
-        impact: event.impact,
-        metadata: {
-          automated: true,
-          requires_review: false
-        }
-      }
-    };
-  }
+  // NOTE: Mock event generator removed - now using real autonomous_events from database
+  // To create test events, insert directly into the autonomous_events table via SQL or Supabase dashboard
 }
 
 export const autonomousService = new AutonomousService();

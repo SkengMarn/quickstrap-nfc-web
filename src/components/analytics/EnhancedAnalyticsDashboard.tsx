@@ -45,9 +45,11 @@ const COLORS = ['#7B61FF', '#FF6B6B', '#4ECDC4', '#FFE66D', '#95E1D3', '#F38181'
 
 export interface EnhancedAnalyticsDashboardProps {
   eventId: string;
+  isSeries?: boolean;
+  seriesId?: string;
 }
 
-const EnhancedAnalyticsDashboard: React.FC<EnhancedAnalyticsDashboardProps> = ({ eventId }) => {
+const EnhancedAnalyticsDashboard: React.FC<EnhancedAnalyticsDashboardProps> = ({ eventId, isSeries = false, seriesId }) => {
   const [analytics, setAnalytics] = useState<EventAnalytics | null>(null);
   const [timeSeriesData, setTimeSeriesData] = useState<TimeSeriesData[]>([]);
   const [gatePerformance, setGatePerformance] = useState<GatePerformanceComparison[]>([]);
@@ -149,8 +151,93 @@ const EnhancedAnalyticsDashboard: React.FC<EnhancedAnalyticsDashboardProps> = ({
   };
 
   const handleExport = () => {
-    // TODO: Implement export functionality
-    alert('Export functionality coming soon!');
+    if (!analytics) return;
+
+    // Prepare comprehensive export data
+    const exportData = {
+      event_information: {
+        name: analytics.event_name,
+        start_date: analytics.start_date,
+        end_date: analytics.end_date,
+        exported_at: new Date().toISOString()
+      },
+      summary_metrics: {
+        unique_attendees: analytics.unique_attendees,
+        total_checkins: analytics.total_checkins,
+        avg_processing_time_ms: analytics.avg_processing_time,
+        gates_used: analytics.gates_used,
+        staff_worked: analytics.staff_worked,
+        capacity_utilization: analytics.capacity_utilization,
+        peak_attendance_time: analytics.peak_attendance_time
+      },
+      category_distribution: analytics.category_distribution,
+      time_series: timeSeriesData,
+      gate_performance: gatePerformance,
+      category_insights: categoryInsights
+    };
+
+    // Convert to CSV and JSON formats
+    const jsonStr = JSON.stringify(exportData, null, 2);
+    const jsonBlob = new Blob([jsonStr], { type: 'application/json' });
+    const jsonUrl = URL.createObjectURL(jsonBlob);
+
+    // Download JSON
+    const jsonLink = document.createElement('a');
+    jsonLink.href = jsonUrl;
+    jsonLink.download = `${analytics.event_name.replace(/\s+/g, '_')}_Analytics_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(jsonLink);
+    jsonLink.click();
+    document.body.removeChild(jsonLink);
+    URL.revokeObjectURL(jsonUrl);
+
+    // Create CSV summary
+    const csvRows = [
+      ['Event Analytics Report'],
+      ['Event Name', analytics.event_name],
+      ['Start Date', analytics.start_date],
+      ['End Date', analytics.end_date],
+      ['Exported', new Date().toLocaleString()],
+      [],
+      ['Summary Metrics'],
+      ['Unique Attendees', analytics.unique_attendees],
+      ['Total Check-ins', analytics.total_checkins],
+      ['Avg Processing Time (ms)', analytics.avg_processing_time.toFixed(2)],
+      ['Gates Used', analytics.gates_used],
+      ['Staff Members', analytics.staff_worked],
+      ['Capacity Utilization (%)', analytics.capacity_utilization?.toFixed(2) || 'N/A'],
+      [],
+      ['Gate Performance'],
+      ['Gate Name', 'Total Check-ins', 'Avg Processing Time (ms)', 'Utilization %', 'Staff Efficiency'],
+      ...gatePerformance.map(g => [
+        g.gate_name,
+        g.total_checkins,
+        g.avg_processing_time_ms.toFixed(2),
+        g.utilization_percentage.toFixed(2),
+        g.staff_efficiency.toFixed(2)
+      ]),
+      [],
+      ['Category Insights'],
+      ['Category', 'Total Wristbands', 'Total Check-ins', 'No-Show Rate %'],
+      ...categoryInsights.map(c => [
+        c.category,
+        c.total_wristbands,
+        c.total_checkins,
+        c.no_show_rate.toFixed(2)
+      ])
+    ];
+
+    const csvContent = csvRows.map(row => row.join(',')).join('\n');
+    const csvBlob = new Blob([csvContent], { type: 'text/csv' });
+    const csvUrl = URL.createObjectURL(csvBlob);
+
+    // Download CSV
+    const csvLink = document.createElement('a');
+    csvLink.href = csvUrl;
+    csvLink.download = `${analytics.event_name.replace(/\s+/g, '_')}_Analytics_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(csvLink);
+    csvLink.click();
+    document.body.removeChild(csvLink);
+    URL.revokeObjectURL(csvUrl);
   };
 
   if (error) {

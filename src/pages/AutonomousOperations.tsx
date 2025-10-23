@@ -58,15 +58,30 @@ const AutonomousOperations: React.FC = () => {
     loadData();
   }, []);
 
-  // Simulate live AI events using the service
+  // Subscribe to real-time AI events from the database
   useEffect(() => {
-    const interval = setInterval(async () => {
-      const service = AutonomousService.getInstance();
-      const newEvent = await service.generateLiveEvent();
-      setLiveEvents(prev => [newEvent, ...prev.slice(0, 9)]);
-    }, 5000);
+    const service = AutonomousService.getInstance();
 
-    return () => clearInterval(interval);
+    // Load initial events
+    const loadInitialEvents = async () => {
+      try {
+        const events = await service.fetchRecentEvents(10);
+        setLiveEvents(events);
+      } catch (error) {
+        console.error('Error loading initial events:', error);
+      }
+    };
+
+    loadInitialEvents();
+
+    // Subscribe to real-time updates
+    const unsubscribe = service.subscribeToAIEvents((event) => {
+      setLiveEvents(prev => [event, ...prev.slice(0, 9)]);
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const getStatusColor = (status: string) => {

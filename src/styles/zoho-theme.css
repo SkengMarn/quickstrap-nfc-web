@@ -1,0 +1,236 @@
+/* Zoho Books Inspired Theme */
+
+:root {
+  /* Colors */
+  --zoho-primary: #2962FF;
+  --zoho-primary-hover: #1E4BD8;
+  --zoho-secondary: #6B7280;
+  --zoho-success: #059669;
+  --zoho-danger: #DC2626;
+  --zoho-warning: #D97706;
+  --zoho-info: #2962FF;
+  
+  /* Background Colors */
+  --zoho-bg-primary: #F9FAFB;
+  --zoho-bg-secondary: #FFFFFF;
+  --zoho-bg-tertiary: #F3F4F6;
+  
+  /* Border Colors */
+  --zoho-border: #E5E7EB;
+  --zoho-border-focus: #2962FF;
+  
+  /* Text Colors */
+  --zoho-text-primary: #111827;
+  --zoho-text-secondary: #4B5563;
+  --zoho-text-tertiary: #6B7280;
+  
+  /* Shadows */
+  --zoho-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --zoho-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --zoho-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  
+  /* Spacing */
+  --zoho-spacing-xs: 0.5rem;
+  --zoho-spacing-sm: 0.75rem;
+  --zoho-spacing-md: 1rem;
+  --zoho-spacing-lg: 1.5rem;
+  --zoho-spacing-xl: 2rem;
+}
+
+/* Base Styles */
+.zoho-page {
+  @apply bg-gray-50 min-h-screen;
+}
+
+.zoho-container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+/* Card Styles */
+.zoho-card {
+  @apply bg-white rounded-lg shadow-sm border border-gray-200;
+}
+
+.zoho-card-header {
+  @apply px-6 py-4 border-b border-gray-200;
+}
+
+.zoho-card-body {
+  @apply p-6;
+}
+
+/* Form Styles */
+.zoho-input {
+  @apply block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm
+  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+  disabled:bg-gray-100 disabled:cursor-not-allowed;
+}
+
+.zoho-select {
+  @apply block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm
+  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+  disabled:bg-gray-100 disabled:cursor-not-allowed;
+}
+
+.zoho-label {
+  @apply block text-sm font-medium text-gray-700 mb-1;
+}
+
+/* Button Styles */
+.zoho-btn {
+  @apply inline-flex items-center justify-center px-4 py-2 border rounded-md
+  text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2
+  disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150;
+}
+
+.zoho-btn-primary {
+  @apply zoho-btn bg-blue-600 text-white border-transparent hover:bg-blue-700
+  focus:ring-blue-500;
+}
+
+.zoho-btn-secondary {
+  @apply zoho-btn bg-white text-gray-700 border-gray-300 hover:bg-gray-50
+  focus:ring-blue-500;
+}
+
+/* Step Progress */
+.zoho-steps {
+  @apply relative;
+}
+
+.zoho-step-progress {
+  @apply absolute top-0 left-0 w-full h-1 bg-gray-200;
+}
+
+.zoho-step-progress-bar {
+  @apply h-full bg-blue-600 transition-all duration-300;
+}
+
+.zoho-step-list {
+  @apply relative z-10 flex justify-between items-center;
+}
+
+.zoho-step {
+  @apply flex flex-col items-center;
+}
+
+.zoho-step-circle {
+  @apply w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium
+  border-2 transition-colors duration-150;
+}
+
+.zoho-step-circle-active {
+  @apply bg-blue-600 text-white border-blue-600;
+}
+
+.zoho-step-circle-completed {
+  @apply bg-blue-600 text-white border-blue-600;
+}
+
+.zoho-step-circle-inactive {
+  @apply bg-white text-gray-500 border-gray-300;
+}
+
+.zoho-step-label {
+  @apply mt-2 text-sm font-medium;
+}
+
+.zoho-step-label-active {
+  @apply text-blue-600;
+}
+
+.zoho-step-label-completed {
+  @apply text-blue-600;
+}
+
+.zoho-step-label-inactive {
+  @apply text-gray-500;
+}
+
+/* Modal Styles */
+.zoho-modal-overlay {
+  @apply fixed inset-0 bg-black bg-opacity-50 z-40;
+}
+
+.zoho-modal {
+  @apply fixed inset-0 z-50 overflow-y-auto;
+}
+
+.zoho-modal-container {
+  @apply flex min-h-screen items-end justify-center px-4 pt-4 pb-20 text-center sm:block sm:p-0;
+}
+
+.zoho-modal-content {
+  @apply relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl 
+  transition-all sm:my-8 sm:w-full sm:max-w-lg mx-auto;
+}
+
+/* Table Styles */
+.zoho-table {
+  @apply min-w-full divide-y divide-gray-200;
+}
+
+.zoho-table-header {
+  @apply bg-gray-50;
+}
+
+.zoho-table-row {
+  @apply hover:bg-gray-50;
+}
+
+.zoho-table-cell {
+  @apply px-6 py-4 whitespace-nowrap text-sm text-gray-500;
+}
+
+/* Navigation Styles */
+.zoho-nav {
+  @apply bg-white shadow;
+}
+
+.zoho-nav-container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+.zoho-nav-content {
+  @apply flex justify-between h-16;
+}
+
+/* Utility Classes */
+.zoho-divider {
+  @apply border-t border-gray-200 my-4;
+}
+
+.zoho-badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.zoho-badge-success {
+  @apply bg-green-100 text-green-800;
+}
+
+.zoho-badge-warning {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.zoho-badge-error {
+  @apply bg-red-100 text-red-800;
+}
+
+/* Animation Classes */
+.zoho-fade-enter {
+  @apply transition-opacity duration-300 ease-out;
+  opacity: 0;
+}
+
+.zoho-fade-enter-active {
+  opacity: 1;
+}
+
+.zoho-fade-exit {
+  @apply transition-opacity duration-300 ease-in;
+  opacity: 1;
+}
+
+.zoho-fade-exit-active {
+  opacity: 0;
+}

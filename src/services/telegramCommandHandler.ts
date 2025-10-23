@@ -27,7 +27,7 @@ export class QuickStrapCommandHandler {
   }
 
   private initializeCommands() {
-    console.log('QuickStrap Telegram Command Handler initialized');
+    // QuickStrap Telegram Command Handler initialized
   }
 
   /**

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabase';
 import { Upload, Download, Search, Filter, Trash2, Edit, Eye, AlertTriangle, CheckCircle, X } from 'lucide-react';
 import * as Papa from 'papaparse';
+import AddToSeriesBulkAction from './AddToSeriesBulkAction';
 
 interface Wristband {
   id: string;
@@ -35,9 +36,11 @@ interface CSVValidationResult {
 
 interface EnhancedWristbandManagerProps {
   eventId: string;
+  isSeries?: boolean;
+  seriesId?: string;
 }
 
-const EnhancedWristbandManager: React.FC<EnhancedWristbandManagerProps> = ({ eventId }) => {
+const EnhancedWristbandManager: React.FC<EnhancedWristbandManagerProps> = ({ eventId, isSeries = false, seriesId }) => {
   const [wristbands, setWristbands] = useState<Wristband[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedWristbands, setSelectedWristbands] = useState<Set<string>>(new Set());
@@ -49,6 +52,7 @@ const EnhancedWristbandManager: React.FC<EnhancedWristbandManagerProps> = ({ eve
   const [csvValidation, setCsvValidation] = useState<CSVValidationResult | null>(null);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showAddToSeries, setShowAddToSeries] = useState(false);
 
   useEffect(() => {
     fetchWristbands();
@@ -57,11 +61,19 @@ const EnhancedWristbandManager: React.FC<EnhancedWristbandManagerProps> = ({ eve
 
   const fetchWristbands = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('wristbands')
-        .select('*')
-        .eq('event_id', eventId)
-        .order('created_at', { ascending: false });
+        .select('*');
+      
+      if (isSeries && seriesId) {
+        // For series: get wristbands with this series_id
+        query = query.eq('series_id', seriesId);
+      } else {
+        // For parent event: get wristbands with this event_id but NO series_id
+        query = query.eq('event_id', eventId).is('series_id', null);
+      }
+      
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
       setWristbands(data || []);
@@ -75,11 +87,17 @@ const EnhancedWristbandManager: React.FC<EnhancedWristbandManagerProps> = ({ eve
   const fetchCategories = async () => {
     try {
       // Extract unique categories from existing wristbands (like WristbandsPage does)
-      const { data, error } = await supabase
+      let query = supabase
         .from('wristbands')
-        .select('category')
-        .eq('event_id', eventId)
-        .order('category');
+        .select('category');
+      
+      if (isSeries && seriesId) {
+        query = query.eq('series_id', seriesId);
+      } else {
+        query = query.eq('event_id', eventId).is('series_id', null);
+      }
+      
+      const { data, error } = await query.order('category');
 
       if (error) throw error;
       
@@ -432,6 +450,12 @@ const EnhancedWristbandManager: React.FC<EnhancedWristbandManagerProps> = ({ eve
             
             <div className="flex items-center space-x-2">
               <button
+                onClick={() => setShowAddToSeries(true)}
+                className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 font-medium"
+              >
+                Add to Series
+              </button>
+              <button
                 onClick={() => bulkUpdateStatus('active')}
                 className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
               >
@@ -719,6 +743,18 @@ const EnhancedWristbandManager: React.FC<EnhancedWristbandManagerProps> = ({ eve
           </div>
         </div>
       )}
+
+      {/* Add to Series Modal */}
+      <AddToSeriesBulkAction
+        isOpen={showAddToSeries}
+        onClose={() => setShowAddToSeries(false)}
+        eventId={eventId}
+        selectedWristbandIds={Array.from(selectedWristbands)}
+        onSuccess={() => {
+          fetchWristbands();
+          setSelectedWristbands(new Set());
+        }}
+      />
     </div>
   );
 };

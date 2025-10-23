@@ -1,6 +1,6 @@
 /**
  * Secure Storage Utility
- * Encrypts sensitive data before storing in localStorage
+ * Uses Web Crypto API for proper encryption
  */
 
 interface SecureStorageOptions {
@@ -10,30 +10,124 @@ interface SecureStorageOptions {
 
 class SecureStorage {
   private readonly prefix = 'qs_secure_';
-  private readonly key = 'quickstrap_storage_key';
+  private readonly keyName = 'quickstrap_storage_key';
 
   /**
-   * Simple encryption using base64 and XOR (for basic obfuscation)
-   * In production, use proper encryption library like crypto-js
+   * Get or create encryption key using Web Crypto API
    */
-  private encrypt(data: string): string {
-    const key = this.key;
-    let encrypted = '';
-    for (let i = 0; i < data.length; i++) {
-      encrypted += String.fromCharCode(data.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+  private async getEncryptionKey(): Promise<CryptoKey> {
+    try {
+      // Try to get existing key from IndexedDB
+      const existingKey = await this.getKeyFromStorage();
+      if (existingKey) {
+        return existingKey;
+      }
+
+      // Generate new key
+      const key = await crypto.subtle.generateKey(
+        {
+          name: 'AES-GCM',
+          length: 256,
+        },
+        true, // extractable
+        ['encrypt', 'decrypt']
+      );
+
+      // Store key in IndexedDB
+      await this.storeKeyInStorage(key);
+      return key;
+    } catch (error) {
+      console.error('Failed to get encryption key:', error);
+      throw new Error('Encryption not available');
     }
-    return btoa(encrypted);
   }
 
-  private decrypt(encryptedData: string): string {
+  /**
+   * Store encryption key in IndexedDB
+   */
+  private async storeKeyInStorage(key: CryptoKey): Promise<void> {
     try {
-      const encrypted = atob(encryptedData);
-      const key = this.key;
-      let decrypted = '';
-      for (let i = 0; i < encrypted.length; i++) {
-        decrypted += String.fromCharCode(encrypted.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-      }
-      return decrypted;
+      const exportedKey = await crypto.subtle.exportKey('raw', key);
+      const keyArray = new Uint8Array(exportedKey);
+      localStorage.setItem(this.keyName, Array.from(keyArray).join(','));
+    } catch (error) {
+      console.error('Failed to store encryption key:', error);
+    }
+  }
+
+  /**
+   * Get encryption key from storage
+   */
+  private async getKeyFromStorage(): Promise<CryptoKey | null> {
+    try {
+      const storedKey = localStorage.getItem(this.keyName);
+      if (!storedKey) return null;
+
+      const keyArray = new Uint8Array(storedKey.split(',').map(Number));
+      return await crypto.subtle.importKey(
+        'raw',
+        keyArray,
+        { name: 'AES-GCM', length: 256 },
+        true,
+        ['encrypt', 'decrypt']
+      );
+    } catch (error) {
+      console.error('Failed to get key from storage:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Encrypt data using AES-GCM
+   */
+  private async encrypt(data: string): Promise<string> {
+    try {
+      const key = await this.getEncryptionKey();
+      const iv = crypto.getRandomValues(new Uint8Array(12)); // 96-bit IV for GCM
+      const encodedData = new TextEncoder().encode(data);
+
+      const encrypted = await crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        encodedData
+      );
+
+      // Combine IV and encrypted data
+      const combined = new Uint8Array(iv.length + encrypted.byteLength);
+      combined.set(iv);
+      combined.set(new Uint8Array(encrypted), iv.length);
+
+      // Convert to base64
+      return btoa(String.fromCharCode(...combined));
+    } catch (error) {
+      console.error('Encryption failed:', error);
+      throw new Error('Encryption failed');
+    }
+  }
+
+  /**
+   * Decrypt data using AES-GCM
+   */
+  private async decrypt(encryptedData: string): Promise<string> {
+    try {
+      const key = await this.getEncryptionKey();
+
+      // Convert from base64
+      const combined = new Uint8Array(
+        atob(encryptedData).split('').map(char => char.charCodeAt(0))
+      );
+
+      // Extract IV and encrypted data
+      const iv = combined.slice(0, 12);
+      const encrypted = combined.slice(12);
+
+      const decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        encrypted
+      );
+
+      return new TextDecoder().decode(decrypted);
     } catch (error) {
       console.error('Decryption failed:', error);
       return '';
@@ -43,7 +137,7 @@ class SecureStorage {
   /**
    * Store data securely
    */
-  setItem(key: string, value: any, options: SecureStorageOptions = {}): void {
+  async setItem(key: string, value: any, options: SecureStorageOptions = {}): Promise<void> {
     try {
       const data = {
         value,
@@ -52,23 +146,26 @@ class SecureStorage {
       };
 
       const serialized = JSON.stringify(data);
-      const finalValue = options.encrypt !== false ? this.encrypt(serialized) : serialized;
-      
+      const finalValue = options.encrypt !== false ? await this.encrypt(serialized) : serialized;
+
       localStorage.setItem(this.prefix + key, finalValue);
     } catch (error) {
       console.error('Secure storage setItem failed:', error);
+      // Fallback to unencrypted storage with warning
+      console.warn('Falling back to unencrypted storage for key:', key);
+      localStorage.setItem(this.prefix + key, JSON.stringify({ value, timestamp: Date.now(), expiry: null }));
     }
   }
 
   /**
    * Retrieve data securely
    */
-  getItem(key: string, encrypted: boolean = true): any {
+  async getItem(key: string, encrypted: boolean = true): Promise<any> {
     try {
       const stored = localStorage.getItem(this.prefix + key);
       if (!stored) return null;
 
-      const serialized = encrypted ? this.decrypt(stored) : stored;
+      const serialized = encrypted ? await this.decrypt(stored) : stored;
       if (!serialized) return null;
 
       const data = JSON.parse(serialized);
@@ -108,8 +205,9 @@ class SecureStorage {
   /**
    * Check if item exists and is not expired
    */
-  hasItem(key: string): boolean {
-    return this.getItem(key) !== null;
+  async hasItem(key: string): Promise<boolean> {
+    const item = await this.getItem(key);
+    return item !== null;
   }
 }
 

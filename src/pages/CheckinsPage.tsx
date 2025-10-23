@@ -1,14 +1,28 @@
-import { useEffect, useState, useMemo } from 'react'
+import {
+    ChevronDown,
+    ChevronUp,
+    Copy,
+    Eye,
+    Filter,
+    Flag,
+    RefreshCw,
+    Search,
+    Settings,
+    Download,
+    Trash2,
+    X
+} from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../services/supabase'
-import { 
-  Search, Download, Filter, ChevronUp, ChevronDown, Settings, 
-  RefreshCw, Eye, Flag, Trash2, Copy, MoreHorizontal, Calendar,
-  Users, MapPin, Clock, FileText, CheckSquare, Square
-} from 'lucide-react'
+import { createSafeSearchTerm } from '../utils/inputSanitizer'
+import { logger } from '../services/logger'
+import { ConfirmModal } from '../components/ui/Modal'
 interface EventBasic {
   id: string;
   name: string;
+  is_series?: boolean;
+  main_event_id?: string;
 }
 
 interface CheckinRecord {
@@ -41,35 +55,40 @@ interface SortConfig {
 const CheckinsPage = () => {
   const [searchParams] = useSearchParams()
   const eventIdParam = searchParams.get('eventId')
-  
+
   // Core data state
   const [checkins, setCheckins] = useState<CheckinRecord[]>([])
   const [events, setEvents] = useState<EventBasic[]>([])
   const [selectedEvent, setSelectedEvent] = useState<string | null>(eventIdParam)
   const [loading, setLoading] = useState(true)
   const [totalCount, setTotalCount] = useState(0)
-  
+
   // Table controls
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [globalSearch, setGlobalSearch] = useState('')
   const [columnFilters, setColumnFilters] = useState<ColumnFilter>({})
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'timestamp', direction: 'desc' })
-  
+
   // UI state
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
   const [showFilters, setShowFilters] = useState(false)
   const [viewMode, setViewMode] = useState<'compact' | 'comfortable' | 'expanded'>('comfortable')
   const [autoRefresh, setAutoRefresh] = useState<number | null>(null)
   const [showColumnControls, setShowColumnControls] = useState(false)
-  
+
   // Date range filter
   const [dateRange, setDateRange] = useState({ start: '', end: '' })
-  
+
   // Modal states
   const [selectedCheckin, setSelectedCheckin] = useState<CheckinRecord | null>(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [showFlagModal, setShowFlagModal] = useState(false)
+
+  // Bulk operations state
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false)
+  const [bulkOperationInProgress, setBulkOperationInProgress] = useState(false)
+
   // Column definitions
   const columns = [
     { key: 'timestamp', label: 'Timestamp', sortable: true, filterable: true },
@@ -104,16 +123,51 @@ const CheckinsPage = () => {
 
   const fetchEvents = async () => {
     try {
-      const { data, error } = await supabase
+      // Fetch parent events
+      const { data: eventsData, error: eventsError } = await supabase
         .from('events')
         .select('id, name')
         .order('start_date', { ascending: false })
+
+      if (eventsError) throw eventsError
+
+      // Fetch all series for these events
+      const eventIds = eventsData?.map(e => e.id) || []
+      const { data: seriesData, error: seriesError } = await supabase
+        .from('event_series')
+        .select('id, name, main_event_id, sequence_number')
+        .in('main_event_id', eventIds)
+        .order('main_event_id', { ascending: false })
+        .order('sequence_number', { ascending: true })
+
+      if (seriesError) throw seriesError
+
+      // Combine events and series into a flat list
+      const combinedList: EventBasic[] = []
       
-      if (error) throw error
-      setEvents(data || [])
-      
-      if (!selectedEvent && data && data.length > 0) {
-        setSelectedEvent(data[0].id)
+      eventsData?.forEach(event => {
+        // Add parent event
+        combinedList.push({
+          ...event,
+          is_series: false
+        })
+        
+        // Add its series as indented items
+        const eventSeries = seriesData?.filter(s => s.main_event_id === event.id) || []
+        eventSeries.forEach(series => {
+          combinedList.push({
+            id: series.id,
+            name: `  ↳ ${series.name}`,
+            is_series: true,
+            main_event_id: series.main_event_id
+          })
+        })
+      })
+
+      setEvents(combinedList)
+
+      if (!selectedEvent && combinedList.length > 0) {
+        setSelectedEvent(combinedList[0].id)
       }
     } catch (error) {
       console.error('Error fetching events:', error)
@@ -122,9 +176,13 @@ const CheckinsPage = () => {
 
   const fetchCheckins = async () => {
     if (!selectedEvent) return
-    
+
     setLoading(true)
     try {
+      // Determine if selected item is a series
+      const selectedItem = events.find(e => e.id === selectedEvent)
+      const isSeries = selectedItem?.is_series || false
+      
       let query = supabase
         .from('checkin_logs')
         .select(`
@@ -134,31 +192,43 @@ const CheckinsPage = () => {
             category
           )
         `, { count: 'exact' })
-        .eq('event_id', selectedEvent)
+      
+      // Filter by series_id or event_id based on selection
+      if (isSeries) {
+        query = query.eq('series_id', selectedEvent)
+      } else {
+        query = query.eq('event_id', selectedEvent).is('series_id', null)
+      }
 
       // Apply sorting
       query = query.order(sortConfig.key, { ascending: sortConfig.direction === 'asc' })
 
       // Apply global search
       if (globalSearch) {
-        query = query.or(`
-          wristbands.nfc_id.ilike.%${globalSearch}%,
-          wristbands.category.ilike.%${globalSearch}%,
-          location.ilike.%${globalSearch}%,
-          staff_id.ilike.%${globalSearch}%,
-          notes.ilike.%${globalSearch}%
-        `)
+        const safeSearchTerm = createSafeSearchTerm(globalSearch);
+        if (safeSearchTerm) {
+          query = query.or(`
+            wristbands.nfc_id.ilike.%${safeSearchTerm}%,
+            wristbands.category.ilike.%${safeSearchTerm}%,
+            location.ilike.%${safeSearchTerm}%,
+            staff_id.ilike.%${safeSearchTerm}%,
+            notes.ilike.%${safeSearchTerm}%
+          `)
+        }
       }
 
       // Apply column filters
       Object.entries(columnFilters).forEach(([column, value]) => {
         if (value) {
-          if (column === 'nfc_id' || column === 'category') {
-            query = query.filter(`wristbands.${column}`, 'ilike', `%${value}%`)
-          } else if (column === 'staff_name') {
-            query = query.filter('staff_id', 'ilike', `%${value}%`)
-          } else {
-            query = query.filter(column, 'ilike', `%${value}%`)
+          const safeValue = createSafeSearchTerm(value);
+          if (safeValue) {
+            if (column === 'nfc_id' || column === 'category') {
+              query = query.filter(`wristbands.${column}`, 'ilike', `%${safeValue}%`)
+            } else if (column === 'staff_name') {
+              query = query.filter('staff_id', 'ilike', `%${safeValue}%`)
+            } else {
+              query = query.filter(column, 'ilike', `%${safeValue}%`)
+            }
           }
         }
       })
@@ -184,7 +254,7 @@ const CheckinsPage = () => {
       // Fetch staff names for the returned check-ins
       const checkinData = data || []
       const staffIds = [...new Set(checkinData.map(c => c.staff_id).filter(Boolean))]
-      
+
       let staffMap = new Map()
       if (staffIds.length > 0) {
         try {
@@ -192,7 +262,7 @@ const CheckinsPage = () => {
             .from('profiles')
             .select('id, full_name, email')
             .in('id', staffIds)
-          
+
           if (staffData) {
             staffData.forEach(staff => {
               staffMap.set(staff.id, staff)
@@ -275,10 +345,9 @@ const CheckinsPage = () => {
   const handleCopyId = async (checkin: CheckinRecord) => {
     try {
       await navigator.clipboard.writeText(checkin.id)
-      // You could add a toast notification here
-      console.log('Check-in ID copied to clipboard:', checkin.id)
+      logger.info('Check-in ID copied', 'CheckinsPage', { checkinId: checkin.id });
     } catch (error) {
-      console.error('Failed to copy to clipboard:', error)
+      logger.error('Failed to copy to clipboard', 'CheckinsPage', error);
       // Fallback for older browsers
       const textArea = document.createElement('textarea')
       textArea.value = checkin.id
@@ -289,9 +358,80 @@ const CheckinsPage = () => {
     }
   }
 
+  // Bulk operation handlers
+  const handleBulkExport = async () => {
+    if (selectedRows.size === 0) return;
+
+    setBulkOperationInProgress(true);
+    try {
+      const selectedCheckins = checkins.filter(c => selectedRows.has(c.id));
+
+      // Create CSV content
+      const headers = ['Timestamp', 'NFC ID', 'Category', 'Location', 'Staff', 'Notes'];
+      const csvRows = [
+        headers.join(','),
+        ...selectedCheckins.map(c => [
+          new Date(c.timestamp).toLocaleString(),
+          c.wristbands?.nfc_id || 'N/A',
+          c.wristbands?.category || 'N/A',
+          c.location || '',
+          c.staff?.full_name || c.staff?.email || 'N/A',
+          `"${(c.notes || '').replace(/"/g, '""')}"`
+        ].join(','))
+      ];
+
+      // Create and download file
+      const csvContent = csvRows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `checkins-export-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      logger.info(`Exported ${selectedRows.size} check-ins`, 'CheckinsPage');
+      setSelectedRows(new Set());
+    } catch (error) {
+      logger.error('Failed to export check-ins', 'CheckinsPage', error);
+      alert('Failed to export check-ins');
+    } finally {
+      setBulkOperationInProgress(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedRows.size === 0) return;
+
+    setBulkOperationInProgress(true);
+    try {
+      const { error } = await supabase
+        .from('checkin_logs')
+        .delete()
+        .in('id', Array.from(selectedRows));
+
+      if (error) throw error;
+
+      // Update local state
+      setCheckins(prev => prev.filter(c => !selectedRows.has(c.id)));
+      setTotalCount(prev => prev - selectedRows.size);
+
+      logger.info(`Deleted ${selectedRows.size} check-ins`, 'CheckinsPage');
+      setSelectedRows(new Set());
+      setShowBulkDeleteModal(false);
+    } catch (error) {
+      logger.error('Failed to delete check-ins', 'CheckinsPage', error);
+      alert('Failed to delete check-ins');
+    } finally {
+      setBulkOperationInProgress(false);
+    }
+  };
+
   const submitFlagForReview = async (reason: string) => {
     if (!selectedCheckin) return
-    
+
     try {
       // Create a fraud detection record
       const { error } = await supabase
@@ -310,7 +450,7 @@ const CheckinsPage = () => {
         })
 
       if (error) throw error
-      
+
       setShowFlagModal(false)
       setSelectedCheckin(null)
       // You could add a success toast here
@@ -323,7 +463,7 @@ const CheckinsPage = () => {
 
   const exportCheckins = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
     if (!selectedEvent) return
-    
+
     try {
       let query = supabase
         .from('checkin_logs')
@@ -344,14 +484,14 @@ const CheckinsPage = () => {
       // Fetch staff names
       const staffIds = [...new Set(data.map(c => c.staff_id).filter(Boolean))]
       let staffMap = new Map()
-      
+
       if (staffIds.length > 0) {
         try {
           const { data: staffData } = await supabase
             .from('profiles')
             .select('id, full_name, email')
             .in('id', staffIds)
-          
+
           if (staffData) {
             staffData.forEach(staff => {
               staffMap.set(staff.id, staff)
@@ -395,7 +535,7 @@ const CheckinsPage = () => {
   const totalPages = Math.ceil(totalCount / pageSize)
   const startRecord = (page - 1) * pageSize + 1
   const endRecord = Math.min(page * pageSize, totalCount)
-  
+
   // View mode configurations
   const getViewModeStyles = () => {
     switch (viewMode) {
@@ -422,7 +562,7 @@ const CheckinsPage = () => {
         }
     }
   }
-  
+
   const viewStyles = getViewModeStyles()
   return (
     <div className="space-y-4">
@@ -434,7 +574,7 @@ const CheckinsPage = () => {
             Showing {startRecord}–{endRecord} of {totalCount.toLocaleString()} records
           </p>
         </div>
-        
+
         {/* Top Controls */}
         <div className="flex flex-wrap items-center gap-2">
           <select
@@ -447,7 +587,7 @@ const CheckinsPage = () => {
             <option value={50}>50 per page</option>
             <option value={100}>100 per page</option>
           </select>
-          
+
           <button
             onClick={() => setShowFilters(!showFilters)}
             className="inline-flex items-center px-3 py-1 border border-gray-300 rounded-md text-sm hover:bg-gray-50"
@@ -455,7 +595,7 @@ const CheckinsPage = () => {
             <Filter size={14} className="mr-1" />
             Filters
           </button>
-          
+
           <div className="relative">
             <button
               onClick={() => setShowColumnControls(!showColumnControls)}
@@ -477,7 +617,7 @@ const CheckinsPage = () => {
               </div>
             )}
           </div>
-          
+
           {autoRefresh && (
             <div className="flex items-center text-sm text-gray-500">
               <RefreshCw size={14} className="mr-1 animate-spin" />
@@ -498,16 +638,27 @@ const CheckinsPage = () => {
               value={selectedEvent || ''}
               onChange={(e) => setSelectedEvent(e.target.value || null)}
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              style={{ zIndex: 7 }}
             >
               <option value="">Select an event</option>
               {events.map((event) => (
-                <option key={event.id} value={event.id}>
+                <option 
+                  key={event.id} 
+                  value={event.id}
+                  style={event.is_series ? { 
+                    color: '#6366f1',
+                    fontStyle: 'italic',
+                    paddingLeft: '1rem'
+                  } : {
+                    fontWeight: '600'
+                  }}
+                >
                   {event.name}
                 </option>
               ))}
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Global Search
@@ -523,7 +674,7 @@ const CheckinsPage = () => {
               />
             </div>
           </div>
-          
+
           <div className="flex items-end">
             <button
               onClick={clearAllFilters}
@@ -604,7 +755,7 @@ const CheckinsPage = () => {
               </select>
             </div>
           </div>
-          
+
           {/* Clear Filters Button */}
           {(dateRange.start || dateRange.end || autoRefresh) && (
             <div className="flex justify-end mt-4">
@@ -669,6 +820,42 @@ const CheckinsPage = () => {
           </div>
         ) : checkins.length > 0 ? (
           <>
+            {/* Bulk Actions Bar */}
+            {selectedRows.size > 0 && (
+              <div className="bg-blue-50 border-b border-blue-200 px-6 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-medium text-blue-900">
+                    {selectedRows.size} {selectedRows.size === 1 ? 'item' : 'items'} selected
+                  </span>
+                  <button
+                    onClick={() => setSelectedRows(new Set())}
+                    className="text-sm text-blue-700 hover:text-blue-900 flex items-center gap-1"
+                  >
+                    <X size={16} />
+                    Clear selection
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleBulkExport}
+                    disabled={bulkOperationInProgress}
+                    className="px-4 py-2 bg-white border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium transition-colors"
+                  >
+                    <Download size={16} />
+                    Export Selected
+                  </button>
+                  <button
+                    onClick={() => setShowBulkDeleteModal(true)}
+                    disabled={bulkOperationInProgress}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium transition-colors"
+                  >
+                    <Trash2 size={16} />
+                    Delete Selected
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="w-full">
               <table className="w-full table-fixed divide-y divide-gray-200">
                 <thead className="bg-gray-50 sticky top-0">
@@ -763,7 +950,7 @@ const CheckinsPage = () => {
                       <td className={`${viewStyles.cellPadding} text-right ${viewStyles.textSize} font-medium w-24`}>
                         <div className="flex items-center space-x-2">
                           <div className="relative group">
-                            <button 
+                            <button
                               onClick={() => handleViewDetails(checkin)}
                               className="text-blue-600 hover:text-blue-900"
                             >
@@ -774,7 +961,7 @@ const CheckinsPage = () => {
                             </div>
                           </div>
                           <div className="relative group">
-                            <button 
+                            <button
                               onClick={() => handleFlagForReview(checkin)}
                               className="text-yellow-600 hover:text-yellow-900"
                             >
@@ -785,7 +972,7 @@ const CheckinsPage = () => {
                             </div>
                           </div>
                           <div className="relative group">
-                            <button 
+                            <button
                               onClick={() => handleCopyId(checkin)}
                               className="text-gray-400 hover:text-gray-600"
                             >
@@ -802,7 +989,7 @@ const CheckinsPage = () => {
                 </tbody>
               </table>
             </div>
-            
+
             {/* Enhanced Pagination */}
             <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
               <div className="flex items-center justify-between">
@@ -816,7 +1003,7 @@ const CheckinsPage = () => {
                     </span>
                   )}
                 </div>
-                
+
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => setPage(1)}
@@ -878,7 +1065,7 @@ const CheckinsPage = () => {
                 ✕
               </button>
             </div>
-            
+
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -908,7 +1095,7 @@ const CheckinsPage = () => {
                   </p>
                 </div>
               </div>
-              
+
               {selectedCheckin.notes && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Notes</label>
@@ -916,7 +1103,7 @@ const CheckinsPage = () => {
                 </div>
               )}
             </div>
-            
+
             <div className="flex justify-end space-x-2 mt-6">
               <button
                 onClick={() => setShowDetailsModal(false)}
@@ -942,7 +1129,7 @@ const CheckinsPage = () => {
                 ✕
               </button>
             </div>
-            
+
             <form onSubmit={(e) => {
               e.preventDefault()
               const formData = new FormData(e.target as HTMLFormElement)
@@ -957,7 +1144,7 @@ const CheckinsPage = () => {
                     Flagging check-in for: <span className="font-mono">{selectedCheckin.wristbands?.nfc_id}</span>
                   </p>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Reason for flagging
@@ -971,7 +1158,7 @@ const CheckinsPage = () => {
                   />
                 </div>
               </div>
-              
+
               <div className="flex justify-end space-x-2 mt-6">
                 <button
                   type="button"
@@ -991,6 +1178,19 @@ const CheckinsPage = () => {
           </div>
         </div>
       )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showBulkDeleteModal}
+        onClose={() => setShowBulkDeleteModal(false)}
+        onConfirm={handleBulkDelete}
+        title="Delete Selected Check-ins"
+        message={`Are you sure you want to delete ${selectedRows.size} check-in record${selectedRows.size === 1 ? '' : 's'}? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        isLoading={bulkOperationInProgress}
+      />
     </div>
   )
 }

@@ -6,8 +6,12 @@
 
 // 1.1 Advanced Event Creation
 export interface EventConfig {
-  // Security Configuration
-  security_mode: 'disabled' | 'optional' | 'required';
+  // Ticket Linking Configuration (iOS App Compatibility)
+  ticket_linking_mode?: 'disabled' | 'optional' | 'required';
+  allow_unlinked_entry?: boolean;
+
+  // Legacy Security Configuration (deprecated - use ticket_linking_mode)
+  security_mode?: 'disabled' | 'optional' | 'required';
 
   // Gate Behavior Settings
   gate_settings: {
@@ -45,7 +49,7 @@ export interface Event {
   start_date: string;
   end_date: string;
   location?: string;
-  capacity?: number;
+  capacity?: number; // iOS NFC App Compatibility
   is_public: boolean;
   logo_url?: string;
   config: EventConfig;
@@ -55,6 +59,11 @@ export interface Event {
   check_ins_enabled: boolean;
   created_at: string;
   updated_at: string;
+
+  // iOS NFC App Compatibility - Top-level ticket linking fields
+  ticket_linking_mode: 'disabled' | 'optional' | 'required';
+  allow_unlinked_entry: boolean;
+  organization_id: string;
 }
 
 export interface EventCreationStep {
@@ -121,6 +130,29 @@ export interface StaffInvitation {
   email: string;
   access_level: AccessLevel;
   personal_message?: string;
+}
+
+// 1.2.5 Series Configuration
+export interface SeriesConfig {
+  // Ticket Linking for this specific series
+  ticket_linking_mode?: 'inherit' | 'disabled' | 'optional' | 'required';
+  allow_unlinked_entry?: boolean;
+  
+  // Series-specific gate settings
+  gate_settings?: {
+    allowed_gates?: string[]; // Restrict to specific gates
+    auto_create_gates?: boolean;
+  };
+  
+  // Series-specific capacity
+  capacity_settings?: {
+    max_capacity?: number;
+    alerts_enabled?: boolean;
+    alert_threshold?: number;
+  };
+  
+  // Custom settings
+  [key: string]: any;
 }
 
 // 1.3 Enhanced Wristband Management

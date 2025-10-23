@@ -137,7 +137,7 @@ export const mlService = {
     if (!event) throw new Error('Event not found');
 
     // Simplified staffing calculation
-    const capacity = event.total_capacity || 1000;
+    const capacity = event.capacity || 1000;
     const recommendedStaff = Math.max(5, Math.ceil(capacity / 200)); // 1 staff per 200 attendees
 
     const prediction = {

@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom'
-import Sidebar from './Sidebar'
+import { LayoutSafetyProvider } from '../ui/LayoutSafety'
 import Header from './Header'
+import Sidebar from './Sidebar'
 
 type DashboardLayoutProps = {
   user: any
@@ -8,15 +9,17 @@ type DashboardLayoutProps = {
 
 const DashboardLayout = ({ user }: DashboardLayoutProps) => {
   return (
-    <div className="layout-container">
-      <Sidebar />
-      <div className="layout-main">
-        <Header user={user} />
-        <main className="layout-content">
-          <Outlet />
-        </main>
+    <LayoutSafetyProvider enableMonitoring={true} enableAutoFix={true}>
+      <div className="layout-container">
+        <Sidebar />
+        <div className="layout-main">
+          <Header user={user} />
+          <main className="layout-content content-safe">
+            <Outlet />
+          </main>
+        </div>
       </div>
-    </div>
+    </LayoutSafetyProvider>
   )
 }
 

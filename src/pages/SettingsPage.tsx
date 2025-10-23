@@ -2,14 +2,15 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import notification from '../utils/notifications';
 import InteractiveTour from '../components/onboarding/InteractiveTour';
-import { 
-  BookOpen, 
-  Settings, 
-  User, 
-  Lock, 
-  Bell, 
-  Shield, 
-  Database, 
+import SystemShutdownControl from '../components/system/SystemShutdownControl';
+import {
+  BookOpen,
+  Settings,
+  User,
+  Lock,
+  Bell,
+  Shield,
+  Database,
   Palette,
   Globe,
   Smartphone,
@@ -24,7 +25,8 @@ import {
   Trash2,
   AlertTriangle,
   CheckCircle,
-  Info
+  Info,
+  Power
 } from 'lucide-react';
 
 interface UserProfile {
@@ -397,6 +399,17 @@ const SettingsPage: React.FC = () => {
             >
               Help & Onboarding
             </button>
+            <button
+              onClick={() => setActiveTab('system')}
+              className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
+                activeTab === 'system'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+              type="button"
+            >
+              System
+            </button>
           </nav>
         </div>
 
@@ -637,6 +650,35 @@ const SettingsPage: React.FC = () => {
                     </ul>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'system' && (
+            <div className="space-y-6">
+              <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-lg p-6 border border-red-200">
+                <div className="flex items-center mb-4">
+                  <Power className="w-8 h-8 text-red-600 mr-3" />
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">System Management</h3>
+                    <p className="text-sm text-gray-600">Critical system operations (Admin only)</p>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg p-4 border border-red-300 mb-4">
+                  <div className="flex items-start">
+                    <AlertTriangle className="w-5 h-5 text-red-600 mr-3 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-semibold text-red-900 mb-1">Critical System Controls</h4>
+                      <p className="text-sm text-gray-700">
+                        The controls below can affect the entire system and all connected users.
+                        Only administrators with proper authorization should access these features.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <SystemShutdownControl />
               </div>
             </div>
           )}

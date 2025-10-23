@@ -1,6 +1,7 @@
-import React, { useState, useRef } from 'react';
-import { Upload, Download, AlertCircle, CheckCircle, X } from 'lucide-react';
+import { AlertCircle, CheckCircle, Download, Upload, X } from 'lucide-react';
+import React, { useRef, useState } from 'react';
 import { supabase } from '../services/supabase';
+import { sanitizeCSVCell, validateFileSize, validateFileType } from '../utils/inputSanitizer';
 
 interface TicketData {
   ticket_id: string;
@@ -20,12 +21,18 @@ interface TicketData {
 
 interface TicketCSVUploadProps {
   eventId: string;
+  eventName?: string;
+  seriesId?: string;
+  isSeries?: boolean;
   onUploadComplete: () => void;
   onClose: () => void;
 }
 
 const TicketCSVUpload: React.FC<TicketCSVUploadProps> = ({
   eventId,
+  eventName,
+  seriesId,
+  isSeries = false,
   onUploadComplete,
   onClose
 }) => {
@@ -40,7 +47,7 @@ const TicketCSVUpload: React.FC<TicketCSVUploadProps> = ({
   const parseCSV = (csvText: string): TicketData[] => {
     const lines = csvText.trim().split('\n');
     const headers = lines[0].split(',').map(h => h.trim());
-    
+
     // Create a mapping of common field names to our expected format
     const fieldMapping: { [key: string]: string } = {
       // Primary ticket identifier fields
@@ -50,7 +57,7 @@ const TicketCSVUpload: React.FC<TicketCSVUploadProps> = ({
       'ticketnumber': 'ticket_id',
       'ticket barcode': 'ticket_barcode',
       'ticketbarcode': 'ticket_barcode',
-      
+
       // Category/Type fields
       'ticket_category': 'category',
       'ticket category': 'category',
@@ -58,25 +65,25 @@ const TicketCSVUpload: React.FC<TicketCSVUploadProps> = ({
       'tickettype': 'category',
       'category': 'category',
       'type': 'category',
-      
+
       // Holder/Purchaser information
       'holder_name': 'holder_name',
       'holder name': 'holder_name',
       'purchaser_name': 'holder_name',
       'purchaser name': 'holder_name',
       'name': 'holder_name',
-      
+
       'holder_email': 'purchaser_email',
       'holder email': 'purchaser_email',
       'purchaser_email': 'purchaser_email',
       'purchaser email': 'purchaser_email',
       'email': 'purchaser_email',
-      
+
       'holder_phone': 'holder_phone',
       'holder phone': 'holder_phone',
       'phone': 'holder_phone',
       'phone_number': 'holder_phone',
-      
+
       // Optional fields
       'price paid': 'price_paid',
       'pricepaid': 'price_paid',
@@ -92,13 +99,13 @@ const TicketCSVUpload: React.FC<TicketCSVUploadProps> = ({
       'checked in': 'checked_in',
       'checkedin': 'checked_in'
     };
-    
+
     // Map headers to our field names
     const mappedHeaders = headers.map(h => {
       const normalized = h.toLowerCase().trim();
       return fieldMapping[normalized] || normalized.replace(/\s+/g, '_');
     });
-    
+
     // Check if we have at least one identifier field
     const hasTicketId = mappedHeaders.includes('ticket_id') || mappedHeaders.includes('ticket_barcode');
     if (!hasTicketId) {
@@ -111,9 +118,9 @@ const TicketCSVUpload: React.FC<TicketCSVUploadProps> = ({
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue; // Skip empty lines
-      
-      const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, '')); // Remove quotes
-      
+
+      const values = line.split(',').map(v => sanitizeCSVCell(v.trim().replace(/^"|"$/g, ''))); // Remove quotes and sanitize
+
       if (values.length !== headers.length) {
         errors.push(`Row ${i + 1}: Column count mismatch (expected ${headers.length}, got ${values.length})`);
         continue;
@@ -128,18 +135,18 @@ const TicketCSVUpload: React.FC<TicketCSVUploadProps> = ({
       if (!ticket.ticket_id && ticket.ticket_barcode) {
         ticket.ticket_id = ticket.ticket_barcode;
       }
-      
+
       // Validate required fields
       if (!ticket.ticket_id) {
         errors.push(`Row ${i + 1}: Missing ticket identifier`);
         continue;
       }
-      
+
       // Set default category if missing
       if (!ticket.category) {
         ticket.category = 'General';
       }
-      
+
       // Convert price to number if present
       if (ticket.price_paid) {
         const price = parseFloat(ticket.price_paid.toString().replace(/[^\d.-]/g, ''));
@@ -166,8 +173,21 @@ const TicketCSVUpload: React.FC<TicketCSVUploadProps> = ({
   };
 
   const processFile = (selectedFile: File) => {
+    // Validate file type
     if (!selectedFile.name.endsWith('.csv')) {
       setErrorMessage('Please select a CSV file');
+      return;
+    }
+
+    // Validate MIME type
+    if (!validateFileType(selectedFile, ['text/csv', 'application/csv'])) {
+      setErrorMessage('Invalid file type. Please select a valid CSV file.');
+      return;
+    }
+
+    // Validate file size (10MB limit)
+    if (!validateFileSize(selectedFile, 10 * 1024 * 1024)) {
+      setErrorMessage('File too large. Maximum size is 10MB.');
       return;
     }
 
@@ -237,15 +257,21 @@ const TicketCSVUpload: React.FC<TicketCSVUploadProps> = ({
           }
 
           // Convert parsed data to tickets format for the database
-          const ticketRecords = tickets.map(ticket => ({
-            event_id: eventId,
-            ticket_number: ticket.ticket_id,
-            ticket_category: ticket.category,
-            holder_name: ticket.holder_name || null,
-            holder_email: ticket.purchaser_email || null,
-            holder_phone: ticket.holder_phone || null,
-            status: 'unused'
-          }));
+          const ticketRecords = tickets.map(ticket => {
+            const record: any = {
+              event_id: eventId,
+              ticket_number: ticket.ticket_id,
+              ticket_category: ticket.category,
+              holder_name: ticket.holder_name || null,
+              holder_email: ticket.purchaser_email || null,
+              holder_phone: ticket.holder_phone || null,
+              status: 'unused'
+            };
+            if (isSeries && seriesId) {
+              record.series_id = seriesId;
+            }
+            return record;
+          });
 
           // Insert tickets into database
           const { error } = await supabase
@@ -264,7 +290,7 @@ const TicketCSVUpload: React.FC<TicketCSVUploadProps> = ({
 
         } catch (error) {
           console.error('Upload error:', error);
-          
+
           // Handle specific error types
           let errorMsg = 'Upload failed';
           if (error && typeof error === 'object' && 'code' in error) {
@@ -284,7 +310,7 @@ const TicketCSVUpload: React.FC<TicketCSVUploadProps> = ({
           } else if (error instanceof Error) {
             errorMsg = error.message;
           }
-          
+
           setErrorMessage(errorMsg);
           setUploadStatus('error');
         } finally {
@@ -339,7 +365,7 @@ const TicketCSVUpload: React.FC<TicketCSVUploadProps> = ({
               <div>
                 <h3 className="text-sm font-medium text-blue-800">Need a template?</h3>
                 <p className="text-sm text-blue-600 mt-1">
-                  Download our CSV template or use your existing ticketing system export. 
+                  Download our CSV template or use your existing ticketing system export.
                   Supports common formats from Quicket, Eventbrite, and other platforms.
                 </p>
               </div>
@@ -380,7 +406,7 @@ const TicketCSVUpload: React.FC<TicketCSVUploadProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Select CSV File
             </label>
-            <div 
+            <div
               className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-gray-400 transition-colors"
               onDragOver={handleDragOver}
               onDragEnter={handleDragEnter}

@@ -5,7 +5,7 @@
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
   --color-primary-light: #dbeafe;
-  
+
   /* Neutral Grays */
   --color-gray-50: #f9fafb;
   --color-gray-100: #f3f4f6;
@@ -17,7 +17,7 @@
   --color-gray-700: #374151;
   --color-gray-800: #1f2937;
   --color-gray-900: #111827;
-  
+
   /* Status Colors (minimal usage) */
   --color-success: #059669;
   --color-success-light: #d1fae5;
@@ -25,7 +25,7 @@
   --color-warning-light: #fef3c7;
   --color-error: #dc2626;
   --color-error-light: #fee2e2;
-  
+
   /* Typography */
   --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-size-xs: 0.75rem;
@@ -35,7 +35,7 @@
   --font-size-xl: 1.25rem;
   --font-size-2xl: 1.5rem;
   --font-size-3xl: 1.875rem;
-  
+
   /* Spacing */
   --spacing-1: 0.25rem;
   --spacing-2: 0.5rem;
@@ -46,13 +46,13 @@
   --spacing-8: 2rem;
   --spacing-12: 3rem;
   --spacing-16: 4rem;
-  
+
   /* Borders */
   --border-radius: 6px;
   --border-radius-lg: 8px;
   --border-width: 1px;
   --border-color: var(--color-gray-200);
-  
+
   /* Shadows */
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
@@ -263,10 +263,13 @@ body {
 }
 
 .layout-sidebar {
-  width: 240px;
   background-color: white;
   border-right: var(--border-width) solid var(--border-color);
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Width is now controlled by the component via Tailwind classes */
 }
 
 .layout-main {
@@ -345,6 +348,122 @@ body {
 .text-sm { font-size: var(--font-size-sm); }
 .text-base { font-size: var(--font-size-base); }
 .text-lg { font-size: var(--font-size-lg); }
+
+/* Layout Safety System */
+.z-content { z-index: 1; }
+.z-content-elevated { z-index: 10; }
+.z-dropdown { z-index: 20; }
+.z-tooltip { z-index: 30; }
+.z-popover { z-index: 40; }
+.z-modal { z-index: 50; }
+.z-modal-backdrop { z-index: 45; }
+.z-notification { z-index: 60; }
+.z-toast { z-index: 70; }
+.z-tour { z-index: 80; }
+.z-tour-highlight { z-index: 85; }
+.z-loading-overlay { z-index: 90; }
+.z-system-alert { z-index: 95; }
+.z-maximum { z-index: 100; }
+
+/* Layout Safety */
+.layout-safe {
+  position: relative;
+  overflow: visible;
+}
+
+.layout-container {
+  position: relative;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.layout-sidebar {
+  position: relative;
+  z-index: 10;
+}
+
+.layout-main {
+  position: relative;
+  z-index: 1;
+}
+
+.layout-header {
+  position: relative;
+  z-index: 15;
+}
+
+.layout-content {
+  position: relative;
+  z-index: 1;
+  padding: 24px;
+  min-height: calc(100vh - 64px);
+}
+
+/* Touch Safety */
+.touch-safe {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.touch-safe-sm {
+  min-height: 36px;
+  min-width: 36px;
+}
+
+.touch-safe-lg {
+  min-height: 56px;
+  min-width: 56px;
+}
+
+/* Content Safety */
+.content-safe {
+  position: relative;
+  z-index: 1;
+}
+
+.content-elevated {
+  position: relative;
+  z-index: 10;
+}
+
+/* Mobile Layout Fixes */
+@media (max-width: 767px) {
+  .layout-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+
+  .layout-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .layout-main {
+    margin-left: 0;
+  }
+
+  .layout-content {
+    padding: 16px;
+  }
+}
+
+/* Tablet Layout Fixes */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .layout-content {
+    padding: 20px;
+  }
+}
+
+/* Desktop Layout Fixes */
+@media (min-width: 1024px) {
+  .layout-content {
+    padding: 24px;
+  }
+}
 .text-xl { font-size: var(--font-size-xl); }
 .text-2xl { font-size: var(--font-size-2xl); }
 

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
-import { ArrowLeft, Users, Activity, MessageSquare, Shield } from 'lucide-react';
+import { ArrowLeft, Users, Activity, MessageSquare, Shield, Send, X } from 'lucide-react';
 import { staffService, StaffActivity } from '../services/staffService';
+import { broadcastService } from '../services/broadcastService';
+import { toast } from 'react-toastify';
 
 interface Event {
   id: string;
@@ -20,6 +22,9 @@ const StaffManagementPage: React.FC = () => {
   const [staffActivity, setStaffActivity] = useState<StaffActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'assignments' | 'activity' | 'messages'>('assignments');
+  const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   useEffect(() => {
     if (eventId) {
@@ -60,8 +65,33 @@ const StaffManagementPage: React.FC = () => {
   };
 
   const sendBroadcastMessage = async () => {
-    // TODO: Implement broadcast message functionality
-    alert('Broadcast message feature coming soon!');
+    if (!broadcastMessage.trim()) {
+      toast.error('Please enter a message');
+      return;
+    }
+
+    if (!eventId) {
+      toast.error('No event selected');
+      return;
+    }
+
+    setSendingMessage(true);
+    try {
+      // Use the broadcast service to send message with real-time push
+      await broadcastService.sendBroadcast(eventId, broadcastMessage, {
+        type: 'broadcast',
+        priority: 'normal'
+      });
+
+      toast.success(`Broadcast message sent to ${staffActivity.length} staff members`);
+      setBroadcastMessage('');
+      setShowBroadcastModal(false);
+    } catch (error) {
+      console.error('Error sending broadcast:', error);
+      toast.error('Failed to send broadcast message');
+    } finally {
+      setSendingMessage(false);
+    }
   };
 
   if (loading) {
@@ -257,22 +287,86 @@ const StaffManagementPage: React.FC = () => {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">Staff Messages</h3>
                 <button
-                  onClick={sendBroadcastMessage}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  onClick={() => setShowBroadcastModal(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center"
                 >
+                  <Send className="w-4 h-4 mr-2" />
                   Send Broadcast
                 </button>
               </div>
-              
+
               <div className="text-center py-8 text-gray-500">
                 <MessageSquare className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                <p>Staff messaging system coming soon</p>
-                <p className="text-sm">Send alerts, updates, and instructions to field staff</p>
+                <p>Broadcast messages to {staffActivity.length} staff members</p>
+                <p className="text-sm">Click "Send Broadcast" to compose and send a message to all staff</p>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Broadcast Message Modal */}
+      {showBroadcastModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-gray-900">Send Broadcast Message</h3>
+              <button
+                onClick={() => {
+                  setShowBroadcastModal(false);
+                  setBroadcastMessage('');
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                This message will be sent to {staffActivity.length} staff members
+              </p>
+              <textarea
+                value={broadcastMessage}
+                onChange={(e) => setBroadcastMessage(e.target.value)}
+                placeholder="Enter your message here..."
+                className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={sendingMessage}
+              />
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowBroadcastModal(false);
+                  setBroadcastMessage('');
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                disabled={sendingMessage}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={sendBroadcastMessage}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={sendingMessage || !broadcastMessage.trim()}
+              >
+                {sendingMessage ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    Send Message
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

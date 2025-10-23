@@ -8,11 +8,15 @@ interface Event {
   name: string;
   start_date: string;
   is_active: boolean;
+  is_series?: boolean;
+  main_event_id?: string;
+  sequence_number?: number;
 }
 
 export default function AnalyticsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
+  const [selectedIsSeries, setSelectedIsSeries] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalEvents: 0,
@@ -28,21 +32,60 @@ export default function AnalyticsPage() {
 
   async function fetchEvents() {
     try {
-      const { data, error } = await supabase
+      // Fetch parent events
+      const { data: eventsData, error: eventsError } = await supabase
         .from('events')
         .select('id, name, start_date, is_active')
         .order('start_date', { ascending: false });
 
-      if (error) throw error;
+      if (eventsError) throw eventsError;
 
-      setEvents(data || []);
+      // Fetch all series for these events
+      const eventIds = eventsData?.map(e => e.id) || [];
+      const { data: seriesData, error: seriesError } = await supabase
+        .from('event_series')
+        .select('id, name, start_date, main_event_id, sequence_number, lifecycle_status')
+        .in('main_event_id', eventIds)
+        .order('main_event_id', { ascending: false })
+        .order('sequence_number', { ascending: true });
 
-      // Auto-select first active event
-      const activeEvent = data?.find((e: Event) => e.is_active);
-      if (activeEvent) {
-        setSelectedEventId(activeEvent.id);
-      } else if (data && data.length > 0) {
-        setSelectedEventId(data[0].id);
+      if (seriesError) throw seriesError;
+
+      // Combine events and series into a flat list
+      const combinedList: Event[] = [];
+      
+      eventsData?.forEach(event => {
+        // Add parent event
+        combinedList.push({
+          ...event,
+          is_series: false
+        });
+        
+        // Add its series as indented items
+        const eventSeries = seriesData?.filter(s => s.main_event_id === event.id) || [];
+        eventSeries.forEach(series => {
+          combinedList.push({
+            id: series.id,
+            name: `  ↳ ${series.name}`,
+            start_date: series.start_date,
+            is_active: series.lifecycle_status === 'active',
+            is_series: true,
+            main_event_id: series.main_event_id,
+            sequence_number: series.sequence_number
+          });
+        });
+      });
+
+      setEvents(combinedList);
+
+      // Auto-select first active event or series
+      const activeItem = combinedList.find((e: Event) => e.is_active);
+      if (activeItem) {
+        setSelectedEventId(activeItem.id);
+        setSelectedIsSeries(activeItem.is_series || false);
+      } else if (combinedList.length > 0) {
+        setSelectedEventId(combinedList[0].id);
+        setSelectedIsSeries(combinedList[0].is_series || false);
       }
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -182,11 +225,26 @@ export default function AnalyticsPage() {
             <select
               id="event-select"
               value={selectedEventId}
-              onChange={(e) => setSelectedEventId(e.target.value)}
+              onChange={(e) => {
+                const selected = events.find(ev => ev.id === e.target.value);
+                setSelectedEventId(e.target.value);
+                setSelectedIsSeries(selected?.is_series || false);
+              }}
               className="block w-full max-w-md rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+              style={{ zIndex: 5 }}
             >
               {events.map((event) => (
-                <option key={event.id} value={event.id}>
+                <option 
+                  key={event.id} 
+                  value={event.id}
+                  style={event.is_series ? { 
+                    color: '#6366f1',
+                    fontStyle: 'italic',
+                    paddingLeft: '1rem'
+                  } : {
+                    fontWeight: '600'
+                  }}
+                >
                   {event.name} - {new Date(event.start_date).toLocaleDateString()}
                   {event.is_active ? ' (Active)' : ''}
                 </option>
@@ -201,7 +259,11 @@ export default function AnalyticsPage() {
 
       {/* Enhanced Analytics Dashboard */}
       {selectedEventId ? (
-        <SafeAnalyticsDashboard eventId={selectedEventId as string} />
+        <SafeAnalyticsDashboard 
+          eventId={selectedEventId as string}
+          isSeries={selectedIsSeries}
+          seriesId={selectedIsSeries ? selectedEventId : undefined}
+        />
       ) : events.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-12 text-center">
           <BarChart3 className="mx-auto h-12 w-12 text-gray-400" />

@@ -49,7 +49,6 @@ class NotificationService {
       }
 
       this.isInitialized = true;
-      console.log('Notification service initialized');
     } catch (error) {
       console.error('Failed to initialize notification service:', error);
     }
@@ -217,20 +216,17 @@ class NotificationService {
       // Check if we have a rule for this event
       const rule = this.rules.get(event);
       if (!rule || !rule.enabled) {
-        console.log(`No active rule found for event: ${event}`);
         return { success: false, reason: 'No active rule' };
       }
 
       // Check if conditions are met
       if (!this.evaluateConditions(rule.conditions, data)) {
-        console.log(`Conditions not met for event: ${event}`);
         return { success: false, reason: 'Conditions not met' };
       }
 
       // Get template for formatting
       const template = this.templates.get(event);
       if (!template || !template.enabled) {
-        console.log(`No active template found for event: ${event}`);
         return { success: false, reason: 'No active template' };
       }
 

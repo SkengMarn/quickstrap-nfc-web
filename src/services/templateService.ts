@@ -120,7 +120,7 @@ export const templateService = {
         template_data: {
           name: event.name,
           location: event.location,
-          capacity: event.total_capacity,
+          capacity: event.capacity,
           config: event.config
         },
         created_by: user.id
@@ -242,10 +242,10 @@ export const templateService = {
     // Copy settings if requested
     if (request.clone_options.clone_settings && sourceEvent) {
       eventData.config = sourceEvent.config;
-      eventData.total_capacity = sourceEvent.total_capacity;
+      eventData.capacity = sourceEvent.capacity;
     } else if (sourceTemplate) {
       eventData.config = sourceTemplate.template_data.config;
-      eventData.total_capacity = sourceTemplate.template_data.capacity;
+      eventData.capacity = sourceTemplate.template_data.capacity;
     }
 
     const { data: newEvent, error: eventError } = await supabase
@@ -287,7 +287,7 @@ export const templateService = {
     if (request.clone_options.clone_wristbands && sourceEvent?.wristbands) {
       const newWristbands = sourceEvent.wristbands.map((wb: any) => ({
         event_id: newEvent.id,
-        nfc_id: wb.nfc_id, // Note: This might create duplicates
+        // Don't copy NFC ID to avoid duplicates - let system assign new ones
         category: wb.category,
         attendee_name: wb.attendee_name,
         attendee_email: wb.attendee_email,

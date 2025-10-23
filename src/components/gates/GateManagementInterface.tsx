@@ -6,8 +6,8 @@ interface Gate {
   id: string;
   name: string;
   status: 'probation' | 'approved' | 'rejected' | 'active' | 'inactive';
-  location_lat?: number;
-  location_lng?: number;
+  latitude?: number;
+  longitude?: number;
   location_description?: string;
   auto_created: boolean;
   created_at: string;
@@ -144,7 +144,7 @@ const GateManagementInterface: React.FC<GateManagementInterfaceProps> = ({ event
     else if (checkinCount > 10) score += 10;
 
     // Increase score if location data is available
-    if (gate.location_lat && gate.location_lng) score += 15;
+    if (gate.latitude && gate.longitude) score += 15;
 
     // Increase score based on time since creation
     const hoursSinceCreation = (Date.now() - new Date(gate.created_at).getTime()) / (1000 * 60 * 60);
@@ -233,8 +233,8 @@ const GateManagementInterface: React.FC<GateManagementInterfaceProps> = ({ event
           event_id: eventId,
           name: gateData.name,
           location_description: gateData.location_description,
-          location_lat: gateData.location_lat,
-          location_lng: gateData.location_lng,
+          latitude: gateData.latitude,
+          longitude: gateData.longitude,
           status: 'approved',
           auto_created: false,
           created_by: currentUser.user?.id,
@@ -332,10 +332,10 @@ const GateManagementInterface: React.FC<GateManagementInterfaceProps> = ({ event
         
         // Check location proximity (if coordinates available)
         let locationDistance = Infinity;
-        if (gate1.location_lat && gate1.location_lng && gate2.location_lat && gate2.location_lng) {
+        if (gate1.latitude && gate1.longitude && gate2.latitude && gate2.longitude) {
           locationDistance = calculateDistance(
-            gate1.location_lat, gate1.location_lng,
-            gate2.location_lat, gate2.location_lng
+            gate1.latitude, gate1.longitude,
+            gate2.latitude, gate2.longitude
           );
         }
 
@@ -650,8 +650,8 @@ const GateManagementInterface: React.FC<GateManagementInterfaceProps> = ({ event
               createManualGate({
                 name: formData.get('name'),
                 location_description: formData.get('location_description'),
-                location_lat: formData.get('location_lat') ? parseFloat(formData.get('location_lat') as string) : null,
-                location_lng: formData.get('location_lng') ? parseFloat(formData.get('location_lng') as string) : null
+                latitude: formData.get('latitude') ? parseFloat(formData.get('latitude') as string) : null,
+                longitude: formData.get('longitude') ? parseFloat(formData.get('longitude') as string) : null
               });
             }}>
               <div className="space-y-4">
@@ -687,7 +687,7 @@ const GateManagementInterface: React.FC<GateManagementInterfaceProps> = ({ event
                     </label>
                     <input
                       type="number"
-                      name="location_lat"
+                      name="latitude"
                       step="any"
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="40.7128"
@@ -699,7 +699,7 @@ const GateManagementInterface: React.FC<GateManagementInterfaceProps> = ({ event
                     </label>
                     <input
                       type="number"
-                      name="location_lng"
+                      name="longitude"
                       step="any"
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="-74.0060"

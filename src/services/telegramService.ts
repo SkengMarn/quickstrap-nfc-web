@@ -74,11 +74,7 @@ class TelegramService {
       if (!botToken || !chatId) {
         console.warn('Telegram service disabled: Missing VITE_TELEGRAM_BOT_TOKEN or VITE_TELEGRAM_CHAT_ID environment variables');
       } else {
-        console.log('Telegram service initialized:', {
-          enabled: this.config.enabled,
-          hasBotToken: !!this.config.botToken,
-          hasChatId: !!this.config.chatId
-        });
+        // Telegram service initialized with valid configuration
       }
     } catch (error) {
       console.error('Failed to initialize Telegram service:', error);

@@ -1,45 +1,48 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './services/supabase';
 import { Session, User } from '@supabase/supabase-js';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import 'leaflet/dist/leaflet.css';
 import './styles/design-system.css';
 
-// Pages
-import LoginPage from './pages/LoginPage';
-import Dashboard from './pages/Dashboard';
-import AutonomousOperations from './pages/AutonomousOperations';
-import EventsPage from './pages/EventsPage';
-import EventDetailsPage from './pages/EventDetailsPage';
-import EventCreatePage from './pages/EventCreatePage';
-import EventEditPage from './pages/EventEditPage';
-// import WristbandEditPage from './pages/WristbandEditPage';
-import CheckinsPage from './pages/CheckinsPage';
-import AccessPage from './pages/AccessPage';
-// import AccessCreatePage from './pages/AccessCreatePage'; // Currently unused
-import AccessEditPage from './pages/AccessEditPage';
-import SettingsPage from './pages/SettingsPage';
-import NotificationTestPage from './pages/NotificationTestPage';
-import StaffManagementPage from './pages/StaffManagementPage';
-import WebhooksPage from './pages/WebhooksPage';
-import TelegramTestPage from './pages/TelegramTestPage';
-import ReportsPage from './pages/ReportsPage';
-import AnalyticsPage from './pages/AnalyticsPage';
-import OrganizationPage from './pages/OrganizationPage';
-import TicketsPage from './pages/TicketsPage';
-import FraudDetectionPage from './pages/FraudDetectionPage';
-import EmergencyPage from './pages/EmergencyPage';
-
-// Components
+// Eager load only critical components
 import DashboardLayout from './components/layout/DashboardLayout';
 import LoadingScreen from './components/common/LoadingScreen';
 import ErrorBoundary from './components/common/ErrorBoundary';
-import PlaceholderPage from './components/common/PlaceholderPage';
-import InteractiveTour from './components/onboarding/InteractiveTour';
-import TourButton from './components/onboarding/TourButton';
 import { OrganizationProvider } from './contexts/OrganizationContext';
-import { BarChart3, FileText, Shield, AlertTriangle, Building } from 'lucide-react';
+
+// Lazy load all pages for better performance
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const AutonomousOperations = lazy(() => import('./pages/AutonomousOperations'));
+const EventsPage = lazy(() => import('./pages/EventsPage'));
+const EventDetailsPage = lazy(() => import('./pages/EventDetailsPage'));
+const EventCreatePage = lazy(() => import('./pages/EventCreatePage'));
+const EventEditPage = lazy(() => import('./pages/EventEditPage'));
+const Contact = lazy(() => import('./pages/Contact'));
+const JobsMapDemo = lazy(() => import('./pages/JobsMapDemo'));
+const AccessPage = lazy(() => import('./pages/AccessPage'));
+const AccessEditPage = lazy(() => import('./pages/AccessEditPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const NotificationTestPage = lazy(() => import('./pages/NotificationTestPage'));
+const StaffManagementPage = lazy(() => import('./pages/StaffManagementPage'));
+const WebhooksPage = lazy(() => import('./pages/WebhooksPage'));
+const TelegramTestPage = lazy(() => import('./pages/TelegramTestPage'));
+const ReportsPage = lazy(() => import('./pages/ReportsPage'));
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
+const OrganizationPage = lazy(() => import('./pages/OrganizationPage'));
+const TicketsPage = lazy(() => import('./pages/TicketsPage'));
+const CheckinsPage = lazy(() => import('./pages/CheckinsPage'));
+const WristbandsPage = lazy(() => import('./pages/WristbandsPage'));
+const MapDemo = lazy(() => import('./pages/MapDemo'));
+const FraudDetectionPage = lazy(() => import('./pages/FraudDetectionPage'));
+const EmergencyPage = lazy(() => import('./pages/EmergencyPage'));
+// SeriesManagementPage removed - series now use EventDetailsPage
+const PlaceholderPage = lazy(() => import('./components/common/PlaceholderPage'));
+const InteractiveTour = lazy(() => import('./components/onboarding/InteractiveTour'));
+const TourButton = lazy(() => import('./components/onboarding/TourButton'));
 
 export const App = () => {
   const [session, setSession] = useState<Session | null>(null);
@@ -121,18 +124,19 @@ export const App = () => {
         theme="light"
       />
       <BrowserRouter>
-        <Routes>
-          <Route
-            path="/login"
-            element={!session ? <LoginPage /> : <Navigate to="/" />}
-          />
-          {/* Protected routes */}
-          {session ? (
-            <Route path="/*" element={
-              <OrganizationProvider>
-                <DashboardLayout user={user} />
-              </OrganizationProvider>
-            }>
+        <Suspense fallback={<LoadingScreen />}>
+          <Routes>
+            <Route
+              path="/login"
+              element={!session ? <LoginPage /> : <Navigate to="/" />}
+            />
+            {/* Protected routes */}
+            {session ? (
+              <Route path="/*" element={
+                <OrganizationProvider>
+                  <DashboardLayout user={user} />
+                </OrganizationProvider>
+              }>
               <Route index element={<Dashboard />} />
               <Route path="autonomous-operations" element={<AutonomousOperations />} />
               <Route path="events" element={<EventsPage />} />
@@ -140,7 +144,11 @@ export const App = () => {
               <Route path="events/:id" element={<EventDetailsPage />} />
               <Route path="events/:id/edit" element={<EventEditPage />} />
               <Route path="events/:eventId/staff" element={<StaffManagementPage />} />
-              {/* <Route path="wristbands/:id/edit" element={<WristbandEditPage />} /> */}
+              {/* Series use same EventDetailsPage as main events */}
+              <Route path="series/:id" element={<EventDetailsPage />} />
+              <Route path="series/:id/edit" element={<EventEditPage isSeries={true} />} />
+              <Route path="wristbands" element={<WristbandsPage />} />
+              <Route path="tickets" element={<TicketsPage />} />
               <Route path="checkins" element={<CheckinsPage />} />
               <Route path="access" element={<AccessPage />} />
               <Route path="access/:id/edit" element={<AccessEditPage />} />
@@ -151,6 +159,7 @@ export const App = () => {
               <Route path="organization" element={<OrganizationPage />} />
               <Route path="webhooks" element={<WebhooksPage />} />
               <Route path="telegram-test" element={<TelegramTestPage />} />
+              <Route path="map-demo" element={<MapDemo />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="notification-test" element={<NotificationTestPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
@@ -159,6 +168,7 @@ export const App = () => {
             <Route path="*" element={<Navigate to="/login" replace />} />
           )}
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </ErrorBoundary>
   );

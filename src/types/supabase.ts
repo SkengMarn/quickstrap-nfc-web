@@ -16,7 +16,7 @@ export interface Database {
           start_date: string | null
           end_date: string | null
           is_public: boolean
-          total_capacity: number | null
+          capacity: number | null
           created_at: string
           updated_at: string
         }
@@ -26,7 +26,7 @@ export interface Database {
           start_date?: string | null
           end_date?: string | null
           is_public?: boolean
-          total_capacity?: number | null
+          capacity?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -36,7 +36,7 @@ export interface Database {
           start_date?: string | null
           end_date?: string | null
           is_public?: boolean
-          total_capacity?: number | null
+          capacity?: number | null
           created_at?: string
           updated_at?: string
         }

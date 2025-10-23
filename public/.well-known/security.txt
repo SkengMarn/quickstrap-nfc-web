@@ -1,0 +1,33 @@
+Contact: security@quickstrap.com
+Expires: 2025-12-31T23:59:59.000Z
+Encryption: https://quickstrap.com/pgp-key.txt
+Preferred-Languages: en
+Canonical: https://quickstrap.com/.well-known/security.txt
+Policy: https://quickstrap.com/security-policy
+
+# Security Policy
+#
+# We take security seriously and appreciate responsible disclosure of vulnerabilities.
+#
+# Please report security issues to security@quickstrap.com
+#
+# What to include in your report:
+# - Description of the vulnerability
+# - Steps to reproduce
+# - Potential impact
+# - Suggested fixes (if any)
+#
+# We will:
+# - Acknowledge receipt within 48 hours
+# - Provide regular updates on our progress
+# - Credit researchers in our security advisories (unless they prefer to remain anonymous)
+#
+# Please do not:
+# - Access or modify data that doesn't belong to you
+# - Disrupt our services
+# - Publicly disclose vulnerabilities before we've had a chance to fix them
+#
+# Thank you for helping keep QuickStrap secure!
+
+
+

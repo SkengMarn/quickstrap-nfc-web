@@ -63,10 +63,80 @@ const Dashboard = () => {
     }
   })
   const [loading, setLoading] = useState(true)
+  const [systemStatus, setSystemStatus] = useState({
+    database: 'checking' as 'online' | 'offline' | 'checking',
+    nfcScanning: 'checking' as 'active' | 'inactive' | 'checking',
+    realtimeSync: 'checking' as 'connected' | 'disconnected' | 'checking'
+  })
 
   useEffect(() => {
     fetchDashboardData()
+    checkSystemStatus()
+
+    // Refresh system status every 30 seconds
+    const statusInterval = setInterval(checkSystemStatus, 30000)
+    return () => clearInterval(statusInterval)
   }, [])
+
+  const checkSystemStatus = async () => {
+    try {
+      // Test database connectivity with a simple query
+      const dbStart = Date.now()
+      const { error: dbError } = await supabase
+        .from('events')
+        .select('id')
+        .limit(1)
+      const dbResponseTime = Date.now() - dbStart
+
+      setSystemStatus(prev => ({
+        ...prev,
+        database: dbError ? 'offline' : 'online'
+      }))
+
+      // Update response time in system health
+      setStats(prev => ({
+        ...prev,
+        systemHealth: {
+          ...prev.systemHealth,
+          responseTime: dbResponseTime,
+          status: dbError ? 'critical' : 'healthy'
+        }
+      }))
+
+      // Check if we can access NFC-related tables (wristbands)
+      const { error: nfcError } = await supabase
+        .from('wristbands')
+        .select('id')
+        .limit(1)
+
+      setSystemStatus(prev => ({
+        ...prev,
+        nfcScanning: nfcError ? 'inactive' : 'active'
+      }))
+
+      // Check realtime subscription status
+      const channel = supabase.channel('system-check')
+      const subscription = channel.subscribe((status) => {
+        setSystemStatus(prev => ({
+          ...prev,
+          realtimeSync: status === 'SUBSCRIBED' ? 'connected' : 'disconnected'
+        }))
+      })
+
+      // Clean up subscription after check
+      setTimeout(() => {
+        supabase.removeChannel(channel)
+      }, 2000)
+
+    } catch (error) {
+      console.error('Error checking system status:', error)
+      setSystemStatus({
+        database: 'offline',
+        nfcScanning: 'inactive',
+        realtimeSync: 'disconnected'
+      })
+    }
+  }
 
   const fetchDashboardData = async () => {
     try {
@@ -384,15 +454,39 @@ const Dashboard = () => {
             <div className="card-body space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Database</span>
-                <span className="status-badge status-success">Online</span>
+                <span className={`status-badge ${
+                  systemStatus.database === 'online' ? 'status-success' :
+                  systemStatus.database === 'offline' ? 'status-error' :
+                  'status-neutral'
+                }`}>
+                  {systemStatus.database === 'online' ? 'Online' :
+                   systemStatus.database === 'offline' ? 'Offline' :
+                   'Checking...'}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">NFC Scanning</span>
-                <span className="status-badge status-success">Active</span>
+                <span className={`status-badge ${
+                  systemStatus.nfcScanning === 'active' ? 'status-success' :
+                  systemStatus.nfcScanning === 'inactive' ? 'status-error' :
+                  'status-neutral'
+                }`}>
+                  {systemStatus.nfcScanning === 'active' ? 'Active' :
+                   systemStatus.nfcScanning === 'inactive' ? 'Inactive' :
+                   'Checking...'}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Real-time Sync</span>
-                <span className="status-badge status-success">Connected</span>
+                <span className={`status-badge ${
+                  systemStatus.realtimeSync === 'connected' ? 'status-success' :
+                  systemStatus.realtimeSync === 'disconnected' ? 'status-error' :
+                  'status-neutral'
+                }`}>
+                  {systemStatus.realtimeSync === 'connected' ? 'Connected' :
+                   systemStatus.realtimeSync === 'disconnected' ? 'Disconnected' :
+                   'Checking...'}
+                </span>
               </div>
             </div>
           </div>

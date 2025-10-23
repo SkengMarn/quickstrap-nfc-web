@@ -28,6 +28,8 @@ import { toast } from 'react-toastify';
 
 export interface SafeAnalyticsDashboardProps {
   eventId: string;
+  isSeries?: boolean;
+  seriesId?: string;
 }
 
 interface BasicAnalytics {
@@ -94,7 +96,7 @@ interface BusinessAnalytics {
   predictiveForecasting: any[];
 }
 
-const SafeAnalyticsDashboard: React.FC<SafeAnalyticsDashboardProps> = ({ eventId }) => {
+const SafeAnalyticsDashboard: React.FC<SafeAnalyticsDashboardProps> = ({ eventId, isSeries = false, seriesId }) => {
   const [analytics, setAnalytics] = useState<BasicAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -125,11 +127,28 @@ const SafeAnalyticsDashboard: React.FC<SafeAnalyticsDashboardProps> = ({ eventId
       setLoading(true);
       setError(null);
 
+      // Build series-aware queries
+      let wristbandsQuery = supabase.from('wristbands').select('id, is_active');
+      let checkinsQuery = supabase.from('checkin_logs').select('id, timestamp');
+      let gatesQuery = supabase.from('gates').select('id, status');
+      
+      if (isSeries && seriesId) {
+        // For series: filter by series_id
+        wristbandsQuery = wristbandsQuery.eq('series_id', seriesId);
+        checkinsQuery = checkinsQuery.eq('series_id', seriesId);
+        gatesQuery = gatesQuery.eq('series_id', seriesId);
+      } else {
+        // For parent event: filter by event_id AND series_id IS NULL
+        wristbandsQuery = wristbandsQuery.eq('event_id', eventId).is('series_id', null);
+        checkinsQuery = checkinsQuery.eq('event_id', eventId).is('series_id', null);
+        gatesQuery = gatesQuery.eq('event_id', eventId).is('series_id', null);
+      }
+
       // Fetch basic analytics data directly from database
       const [wristbandsResult, checkinsResult, gatesResult] = await Promise.allSettled([
-        supabase.from('wristbands').select('id, is_active').eq('event_id', eventId),
-        supabase.from('checkin_logs').select('id, timestamp').eq('event_id', eventId),
-        supabase.from('gates').select('id, status').eq('event_id', eventId)
+        wristbandsQuery,
+        checkinsQuery,
+        gatesQuery
       ]);
 
       let totalWristbands = 0;
@@ -231,10 +250,18 @@ const SafeAnalyticsDashboard: React.FC<SafeAnalyticsDashboardProps> = ({ eventId
         .eq('event_id', eventId)
         .order('efficiency_score', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        // Table doesn't exist yet - silently handle
+        if (error.code === '42P01') {
+          setStaffPerformance([]);
+          return;
+        }
+        throw error;
+      }
       setStaffPerformance(data || []);
     } catch (err) {
-      console.error('Error loading staff performance:', err);
+      // Silently handle - this is an optional feature
+      setStaffPerformance([]);
     }
   };
 
@@ -334,7 +361,7 @@ const SafeAnalyticsDashboard: React.FC<SafeAnalyticsDashboardProps> = ({ eventId
       // Get event details for capacity
       const { data: event } = await supabase
         .from('events')
-        .select('total_capacity, start_date, end_date')
+        .select('capacity, start_date, end_date')
         .eq('id', eventId)
         .single();
 
@@ -379,8 +406,8 @@ const SafeAnalyticsDashboard: React.FC<SafeAnalyticsDashboardProps> = ({ eventId
       }
 
       const attendanceData: AttendanceAnalytics = {
-        totalCapacity: event.total_capacity || 0,
-        capacityUtilization: analytics ? (analytics.checkedIn / event.total_capacity) * 100 : 0,
+        totalCapacity: event.capacity || 0,
+        capacityUtilization: analytics ? (analytics.checkedIn / event.capacity) * 100 : 0,
         avgDwellTime: dwellTimeResult.status === 'fulfilled' ? dwellTimeResult.value.data || 0 : 0,
         checkInVelocity: velocityData,
         peakOccupancy: Math.max(...velocityData),
@@ -677,7 +704,7 @@ const SafeAnalyticsDashboard: React.FC<SafeAnalyticsDashboardProps> = ({ eventId
           loadBusinessAnalytics()
         ]);
       } catch (error) {
-        if (isMounted && error.name !== 'AbortError') {
+        if (isMounted && (error instanceof Error && error.name !== 'AbortError')) {
           console.error('Error loading analytics:', error);
           setError(error instanceof Error ? error.message : 'Failed to load analytics');
         }

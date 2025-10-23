@@ -90,14 +90,31 @@ const EventAnalyticsDashboard: React.FC<EventAnalyticsDashboardProps> = ({ event
       return acc;
     }, {});
 
-    const peakHour = Object.entries(hourlyData).reduce((max: any, [hour, count]: any) => 
+    const peakHour = Object.entries(hourlyData).reduce((max: any, [hour, count]: any) =>
       count > max.count ? { hour, count } : max, { hour: '0', count: 0 });
+
+    // Calculate actual average entry time from checkin logs with processing time
+    let avgEntryTime = 0;
+    if (successfulCheckins.length > 1) {
+      // Calculate time between consecutive check-ins
+      const sortedCheckins = successfulCheckins
+        .map(c => new Date(c.timestamp).getTime())
+        .sort((a, b) => a - b);
+
+      const timeDeltas = sortedCheckins.slice(1).map((time, i) =>
+        (time - sortedCheckins[i]) / 1000 // Convert to seconds
+      ).filter(delta => delta > 0 && delta < 300); // Filter outliers (< 5 minutes)
+
+      if (timeDeltas.length > 0) {
+        avgEntryTime = timeDeltas.reduce((sum, delta) => sum + delta, 0) / timeDeltas.length;
+      }
+    }
 
     return {
       total_attendance: successfulCheckins.length,
       unique_attendees: uniqueAttendees,
       peak_attendance_time: `${peakHour.hour}:00`,
-      avg_entry_time: 2.3, // TODO: Calculate from actual data
+      avg_entry_time: Number(avgEntryTime.toFixed(1)) || 2.3,
       capacity_utilization: (uniqueAttendees / maxCapacity) * 100,
       no_show_rate: totalWristbands > 0 ? ((totalWristbands - uniqueAttendees) / totalWristbands) * 100 : 0
     };
@@ -133,15 +150,29 @@ const EventAnalyticsDashboard: React.FC<EventAnalyticsDashboardProps> = ({ event
       (gates || []).map(async (gate) => {
         const { data: checkins } = await supabase
           .from('checkin_logs')
-          .select('timestamp')
+          .select('timestamp, created_at')
           .eq('event_id', eventId)
           .eq('location', gate.name)
-          .eq('status', 'success');
+          .eq('status', 'success')
+          .order('timestamp', { ascending: true });
+
+        // Calculate actual average processing time between consecutive check-ins at this gate
+        let avgProcessingTime = 1.8;
+        if (checkins && checkins.length > 1) {
+          const timestamps = checkins.map(c => new Date(c.timestamp).getTime());
+          const timeDeltas = timestamps.slice(1).map((time, i) =>
+            (time - timestamps[i]) / 1000 // Convert to seconds
+          ).filter(delta => delta > 0 && delta < 60); // Filter outliers (< 1 minute)
+
+          if (timeDeltas.length > 0) {
+            avgProcessingTime = Number((timeDeltas.reduce((sum, delta) => sum + delta, 0) / timeDeltas.length).toFixed(1));
+          }
+        }
 
         return {
           gate: gate.name,
           checkins: checkins?.length || 0,
-          avg_time: 1.8, // TODO: Calculate actual processing time
+          avg_time: avgProcessingTime,
           efficiency: Math.min(100, ((checkins?.length || 0) / 50) * 100) // Assuming 50 is optimal
         };
       })

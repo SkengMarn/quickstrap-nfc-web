@@ -28,21 +28,23 @@ const AIDecisionExplainer: React.FC<AIDecisionExplainerProps> = ({
 }) => {
   const [activeSection, setActiveSection] = useState<'overview' | 'factors' | 'confidence' | 'impact'>('overview');
 
-  // Use provided explanation or create default from event data
+  // Use provided explanation or extract from event details (no fake defaults)
   const displayExplanation: DecisionExplanation = explanation || {
-    decision: (event.data as any)?.decision || 'created',
-    factors: [
-      { metric: 'Confidence Score', value: (event.data as any)?.confidence || 0.8, weight: 0.4, impact: ((event.data as any)?.confidence || 0.8) > 0.8 ? 'positive' : 'negative' },
-      { metric: 'Event Impact', value: 0.85, weight: 0.3, impact: 'positive' },
-      { metric: 'System Health', value: 0.92, weight: 0.2, impact: 'positive' },
-      { metric: 'Data Quality', value: 0.88, weight: 0.1, impact: 'positive' }
-    ],
-    primaryReason: (event.data as any)?.reasoning || 'Automated decision based on system analysis',
+    decision: (event as any).type || 'unknown',
+    factors: (event as any).confidence ? [
+      {
+        metric: 'Confidence Score',
+        value: (event as any).confidence,
+        weight: 1.0,
+        impact: (event as any).confidence > 0.8 ? 'positive' : 'negative'
+      }
+    ] : [],
+    primaryReason: (event as any).details?.reasoning || (event as any).details?.action || 'Automated AI decision',
     confidenceBreakdown: {
-      spatialConsistency: ((event.data as any)?.confidence || 0.8) * 0.9,
-      sampleSize: Math.min(((event.data as any)?.confidence || 0.8) * 1.1, 1.0),
-      temporalStability: (event.data as any)?.confidence || 0.8,
-      categoryDistribution: ((event.data as any)?.confidence || 0.8) * 0.95
+      spatialConsistency: (event as any).confidence || 0,
+      sampleSize: (event as any).confidence || 0,
+      temporalStability: (event as any).confidence || 0,
+      categoryDistribution: (event as any).confidence || 0
     }
   };
 

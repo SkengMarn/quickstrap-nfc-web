@@ -19,18 +19,45 @@ export const organizationService = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    const { data, error } = await supabase
+    // Try to fetch organizations user created
+    const { data: createdOrgs, error: createdError } = await supabase
       .from('organizations')
-      .select(`
-        *,
-        organization_members!inner(user_id, role, status)
-      `)
-      .eq('organization_members.user_id', user.id)
-      .eq('organization_members.status', 'active')
-      .order('created_at', { ascending: false });
+      .select('*')
+      .eq('created_by', user.id);
 
-    if (error) throw error;
-    return data as Organization[];
+    // Also fetch organizations user is a member of
+    const { data: memberOrgs, error: memberError } = await supabase
+      .from('organization_members')
+      .select('organization_id, organizations(*)')
+      .eq('user_id', user.id)
+      .eq('status', 'active');
+
+    // Combine and deduplicate
+    const allOrgs: Organization[] = [];
+    const seenIds = new Set<string>();
+
+    // Add created orgs
+    if (createdOrgs) {
+      createdOrgs.forEach(org => {
+        if (!seenIds.has(org.id)) {
+          allOrgs.push(org);
+          seenIds.add(org.id);
+        }
+      });
+    }
+
+    // Add member orgs
+    if (memberOrgs) {
+      memberOrgs.forEach((item: any) => {
+        const org = item.organizations;
+        if (org && !seenIds.has(org.id)) {
+          allOrgs.push(org);
+          seenIds.add(org.id);
+        }
+      });
+    }
+
+    return allOrgs;
   },
 
   /**
@@ -64,6 +91,7 @@ export const organizationService = {
 
   /**
    * Create a new organization
+   * NOTE: The database trigger automatically adds the creator as owner
    */
   async createOrganization(data: {
     name: string;
@@ -83,34 +111,60 @@ export const organizationService = {
       .select()
       .single();
 
-    if (orgError) throw orgError;
+    if (orgError) {
+      console.error('Error creating organization:', orgError);
+      throw orgError;
+    }
 
-    // Add creator as owner
-    const { error: memberError } = await supabase
-      .from('organization_members')
-      .insert({
+    // NOTE: The database trigger 'on_organization_created' automatically
+    // adds the creator as owner to organization_members table
+    // We don't need to manually insert into organization_members here
+
+    // Wait a moment for trigger to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Create default settings (optional)
+    try {
+      const defaultSettings: OrganizationSettings = {
         organization_id: org.id,
-        user_id: user.id,
-        role: 'owner',
-        status: 'active'
-      });
+        branding: {
+          primary_color: '#3B82F6',
+          secondary_color: '#1E40AF',
+          logo_url: null
+        },
+        features: {
+          analytics_enabled: true,
+          fraud_detection: false,
+          ai_insights: false,
+          api_access: false,
+          white_label: false,
+          custom_workflows: false
+        },
+        integrations: {},
+        notifications: {
+          email_enabled: true,
+          sms_enabled: false,
+          push_enabled: false,
+          webhook_url: null
+        },
+        security: {
+          two_factor_required: false,
+          session_timeout_minutes: 60,
+          allowed_domains: []
+        }
+      };
 
-    if (memberError) throw memberError;
+      await this.updateOrganizationSettings(org.id, defaultSettings);
+    } catch (settingsError) {
+      console.warn('Could not create default settings:', settingsError);
+      // Don't fail organization creation if settings fail
+    }
 
-    // Create default settings
-    const { error: settingsError } = await supabase
-      .from('organization_settings')
-      .insert({
-        organization_id: org.id
-      });
-
-    if (settingsError) throw settingsError;
-
-    return org as Organization;
+    return org;
   },
 
   /**
-   * Update organization
+   * Update organization details
    */
   async updateOrganization(
     organizationId: string,
@@ -118,7 +172,10 @@ export const organizationService = {
   ): Promise<Organization> {
     const { data, error } = await supabase
       .from('organizations')
-      .update(updates)
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString()
+      })
       .eq('id', organizationId)
       .select()
       .single();
@@ -128,7 +185,7 @@ export const organizationService = {
   },
 
   /**
-   * Delete organization (owner only)
+   * Delete organization
    */
   async deleteOrganization(organizationId: string): Promise<void> {
     const { error } = await supabase
@@ -139,33 +196,66 @@ export const organizationService = {
     if (error) throw error;
   },
 
-  // ==========================================================================
-  // ORGANIZATION MEMBERS
-  // ==========================================================================
+  /**
+   * Get organization settings
+   */
+  async getOrganizationSettings(organizationId: string): Promise<OrganizationSettings> {
+    // Settings might be stored in organization.settings JSONB column
+    // or in a separate settings table - adjust based on your schema
+    const org = await this.getOrganization(organizationId);
+
+    return (org.settings || {}) as OrganizationSettings;
+  },
 
   /**
-   * Get all members of an organization
+   * Update organization settings
+   */
+  async updateOrganizationSettings(
+    organizationId: string,
+    settings: Partial<OrganizationSettings>
+  ): Promise<void> {
+    // Get current settings
+    const currentSettings = await this.getOrganizationSettings(organizationId);
+
+    // Merge with new settings
+    const updatedSettings = {
+      ...currentSettings,
+      ...settings
+    };
+
+    // Update organization
+    await this.updateOrganization(organizationId, {
+      settings: updatedSettings as any
+    });
+  },
+
+  /**
+   * Get organization members
    */
   async getOrganizationMembers(organizationId: string): Promise<OrganizationMember[]> {
     const { data, error } = await supabase
       .from('organization_members')
       .select(`
         *,
-        user:profiles!organization_members_user_id_fkey(id, email, full_name)
+        profiles:user_id (
+          id,
+          email,
+          full_name
+        )
       `)
       .eq('organization_id', organizationId)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return data as unknown as OrganizationMember[];
+    return data as OrganizationMember[];
   },
 
   /**
-   * Get current user's membership in an organization
+   * Get user's membership in an organization
    */
-  async getUserMembership(organizationId: string): Promise<OrganizationMember | null> {
+  async getUserMembership(organizationId: string): Promise<OrganizationMember> {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    if (!user) throw new Error('Not authenticated');
 
     const { data, error } = await supabase
       .from('organization_members')
@@ -174,48 +264,53 @@ export const organizationService = {
       .eq('user_id', user.id)
       .single();
 
-    if (error) {
-      if (error.code === 'PGRST116') return null; // Not found
-      throw error;
-    }
-
+    if (error) throw error;
     return data as OrganizationMember;
   },
 
   /**
-   * Invite a user to an organization
+   * Invite a member to organization
    */
-  async inviteMember(request: OrganizationInviteRequest): Promise<void> {
+  async inviteMember(invite: OrganizationInviteRequest): Promise<void> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // Check if user with email exists
-    const { data: profiles } = await supabase
+    // Check if user exists by email
+    const { data: invitedUser } = await supabase
       .from('profiles')
       .select('id')
-      .eq('email', request.email)
+      .eq('email', invite.email)
       .single();
 
-    if (!profiles) {
-      throw new Error('User not found. They must create an account first.');
+    if (!invitedUser) {
+      throw new Error('User with this email does not exist');
     }
 
-    // Create membership
+    // Check if already a member
+    const { data: existingMember } = await supabase
+      .from('organization_members')
+      .select('id')
+      .eq('organization_id', invite.organization_id)
+      .eq('user_id', invitedUser.id)
+      .maybeSingle();
+
+    if (existingMember) {
+      throw new Error('User is already a member of this organization');
+    }
+
+    // Add member
     const { error } = await supabase
       .from('organization_members')
       .insert({
-        organization_id: request.organization_id,
-        user_id: profiles.id,
-        role: request.role,
-        permissions: request.permissions || {},
-        status: 'invited',
+        organization_id: invite.organization_id,
+        user_id: invitedUser.id,
+        role: invite.role || 'member',
+        status: 'active',
         invited_by: user.id,
-        invited_at: new Date().toISOString()
+        joined_at: new Date().toISOString()
       });
 
     if (error) throw error;
-
-    // TODO: Send email invitation via N8N webhook
   },
 
   /**
@@ -249,132 +344,17 @@ export const organizationService = {
   },
 
   /**
-   * Accept invitation
+   * Set current organization (for context)
    */
-  async acceptInvitation(organizationId: string): Promise<void> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
-
-    const { error } = await supabase
-      .from('organization_members')
-      .update({
-        status: 'active',
-        joined_at: new Date().toISOString()
-      })
-      .eq('organization_id', organizationId)
-      .eq('user_id', user.id)
-      .eq('status', 'invited');
-
-    if (error) throw error;
-  },
-
-  // ==========================================================================
-  // ORGANIZATION SETTINGS
-  // ==========================================================================
-
-  /**
-   * Get organization settings
-   */
-  async getOrganizationSettings(organizationId: string): Promise<OrganizationSettings> {
-    const { data, error } = await supabase
-      .from('organization_settings')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .single();
-
-    if (error) throw error;
-    return data as OrganizationSettings;
+  setCurrentOrganization(organizationId: string): void {
+    localStorage.setItem('currentOrganizationId', organizationId);
   },
 
   /**
-   * Update organization settings
+   * Get current organization ID from storage
    */
-  async updateOrganizationSettings(
-    organizationId: string,
-    updates: Partial<OrganizationSettings>
-  ): Promise<OrganizationSettings> {
-    const { data, error } = await supabase
-      .from('organization_settings')
-      .update(updates)
-      .eq('organization_id', organizationId)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data as OrganizationSettings;
-  },
-
-  /**
-   * Enable/disable feature
-   */
-  async toggleFeature(
-    organizationId: string,
-    feature: string,
-    enabled: boolean
-  ): Promise<void> {
-    const settings = await this.getOrganizationSettings(organizationId);
-
-    const updatedFeatures = {
-      ...settings.features,
-      [feature]: enabled
-    };
-
-    await this.updateOrganizationSettings(organizationId, {
-      features: updatedFeatures
-    });
-  },
-
-  // ==========================================================================
-  // UTILITY METHODS
-  // ==========================================================================
-
-  /**
-   * Check if user has specific role in organization
-   */
-  async hasRole(
-    organizationId: string,
-    requiredRoles: OrgRole[]
-  ): Promise<boolean> {
-    const membership = await this.getUserMembership(organizationId);
-    if (!membership) return false;
-
-    return requiredRoles.includes(membership.role);
-  },
-
-  /**
-   * Check if user is admin or owner
-   */
-  async isAdmin(organizationId: string): Promise<boolean> {
-    return this.hasRole(organizationId, ['owner', 'admin']);
-  },
-
-  /**
-   * Get current user's active organization (default)
-   */
-  async getCurrentOrganization(): Promise<Organization | null> {
-    const orgs = await this.getUserOrganizations();
-    if (orgs.length === 0) return null;
-
-    // Return first org, or get from localStorage preference
-    const preferredOrgId = localStorage.getItem('current_organization_id');
-    if (preferredOrgId) {
-      const preferred = orgs.find(o => o.id === preferredOrgId);
-      if (preferred) return preferred;
-    }
-
-    return orgs[0];
-  },
-
-  /**
-   * Set current organization
-   */
-  async setCurrentOrganization(organizationId: string): Promise<void> {
-    // SECURITY FIX: Use secure storage for organization data
-    const { secureStorage } = await import('../utils/secureStorage');
-    secureStorage.setItem('current_organization_id', organizationId, { 
-      encrypt: true,
-      expiry: 7 * 24 * 60 * 60 * 1000 // 7 days
-    });
+  getCurrentOrganizationId(): string | null {
+    return localStorage.getItem('currentOrganizationId');
   }
 };
 

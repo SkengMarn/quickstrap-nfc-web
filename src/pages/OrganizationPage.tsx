@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Building, Users, Settings, Mail, Trash2, Shield, Plus, UserPlus } from 'lucide-react';
+import { Building, Users, Settings, Mail, Trash2, Shield, Plus, UserPlus, Lock } from 'lucide-react';
 import { useOrganization } from '../contexts/OrganizationContext';
 import organizationService from '../services/organizationService';
 import { OrganizationMember, OrgRole } from '../types/phase1';
 import { toast } from 'react-toastify';
+import { accessControlService } from '../services/accessControlService';
 
 export default function OrganizationPage() {
   const { currentOrganization, userMembership, refreshOrganization } = useOrganization();
@@ -13,6 +14,10 @@ export default function OrganizationPage() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<OrgRole>('member');
+  
+  // Access control
+  const [userAccess, setUserAccess] = useState<any>(null);
+  const [accessLoading, setAccessLoading] = useState(true);
 
   // Organization edit state
   const [isEditing, setIsEditing] = useState(false);

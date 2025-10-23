@@ -1,76 +1,245 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase, Event } from '../services/supabase'
-import { Plus, Calendar, MapPin, Users, Clock, Search, Edit, Trash2 } from 'lucide-react'
+import { Plus, Calendar } from 'lucide-react'
+import accessControlService from '../services/accessControlService'
+import { eventActivationService } from '../services/eventActivationService'
+import CompactEventsTable from '../components/events/CompactEventsTable'
+import { logger } from '../services/logger'
+import { LoadingSpinner } from '../components/ui/LoadingStates'
+import { EmptyEvents } from '../components/ui/LoadingStates'
+
+interface EnhancedEvent extends Event {
+  tickets_sold?: number;
+  tickets_remaining?: number;
+  checked_in_count?: number;
+  wristbands_count?: number;
+  created_by_name?: string;
+  updated_by_name?: string;
+  status_changed_by_name?: string;
+  series?: any[];
+}
 
 const EventsPage = () => {
-  const [events, setEvents] = useState<Event[]>([])
-  const [filteredEvents, setFilteredEvents] = useState<Event[]>([])
+  const [events, setEvents] = useState<EnhancedEvent[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchEvents()
   }, [])
 
-  useEffect(() => {
-    filterEvents()
-  }, [events, searchTerm, statusFilter])
-
   const fetchEvents = async () => {
+    const startTime = performance.now();
+
     try {
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .order('created_at', { ascending: false })
+      setLoading(true);
 
-      if (error) throw error
-      setEvents(data || [])
-    } catch (error) {
-      console.error('Error fetching events:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+      // First, refresh event activations to ensure scheduled events are activated
+      await eventActivationService.autoRefreshIfNeeded();
 
-  const filterEvents = () => {
-    let filtered = events
+      // Get user's accessible event IDs with error handling
+      let accessibleEventIds: string[] | 'all' = [];
+      try {
+        accessibleEventIds = await accessControlService.getAccessibleEventIds();
+      } catch (accessError) {
+        logger.error('Failed to get accessible event IDs', 'EventsPage', accessError);
+        setEvents([]);
+        setLoading(false);
+        return;
+      }
 
-    // Search filter
-    if (searchTerm) {
-      filtered = filtered.filter(event =>
-        event.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        event.location?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    }
+      // Use the enhanced event fetching with automatic activation
+      const allEvents = await eventActivationService.getEventsWithAutoActivation();
 
-    // Status filter
-    if (statusFilter !== 'all') {
-      const now = new Date()
-      filtered = filtered.filter(event => {
-        const startDate = new Date(event.start_date)
-        const endDate = new Date(event.end_date)
-        const isActive = now >= startDate && now <= endDate
-        const isPast = now > endDate
-        const isUpcoming = now < startDate
-
-        switch (statusFilter) {
-          case 'active': return isActive
-          case 'upcoming': return isUpcoming
-          case 'past': return isPast
-          default: return true
+      // Filter by accessible events if needed
+      let filteredData = allEvents;
+      if (accessibleEventIds !== 'all') {
+        if (accessibleEventIds.length === 0) {
+          logger.info('User has no accessible events', 'EventsPage');
+          setEvents([]);
+          setLoading(false);
+          return;
         }
-      })
-    }
+        filteredData = allEvents.filter((event: any) => accessibleEventIds.includes(event.id));
+      }
 
-    setFilteredEvents(filtered)
+      if (filteredData.length === 0) {
+        setEvents([]);
+        setLoading(false);
+        return;
+      }
+
+      // OPTIMIZED: Fetch all metrics in parallel using batch queries
+      const eventIds = filteredData.map((e: any) => e.id);
+
+      // Batch fetch all counts and related data
+      const [ticketsData, checkinsData, wristbandsData, seriesData, seriesWristbandsData, seriesTicketsData, seriesCheckinsData] = await Promise.all([
+        // Tickets count per event (only those NOT belonging to a series)
+        supabase
+          .from('tickets')
+          .select('event_id')
+          .in('event_id', eventIds)
+          .is('series_id', null),
+
+        // Checkins count per event (only those NOT belonging to a series)
+        supabase
+          .from('checkin_logs')
+          .select('event_id')
+          .in('event_id', eventIds)
+          .is('series_id', null),
+
+        // Wristbands count per event (only those NOT belonging to a series)
+        supabase
+          .from('wristbands')
+          .select('event_id')
+          .in('event_id', eventIds)
+          .is('series_id', null),
+
+        // Series data for all events
+        supabase
+          .from('event_series')
+          .select('*')
+          .in('main_event_id', eventIds)
+          .order('sequence_number', { ascending: true }),
+
+        // Wristbands for series events (by series_id)
+        supabase
+          .from('wristbands')
+          .select('series_id')
+          .not('series_id', 'is', null),
+
+        // Tickets for series events (by series_id)
+        supabase
+          .from('tickets')
+          .select('series_id')
+          .not('series_id', 'is', null),
+
+        // Check-ins for series events (by series_id)
+        supabase
+          .from('checkin_logs')
+          .select('series_id')
+          .not('series_id', 'is', null)
+      ]);
+
+      // Get unique user IDs to fetch profiles in one query
+      const userIds = new Set<string>();
+      filteredData.forEach((event: any) => {
+        if (event.created_by) userIds.add(event.created_by);
+        if (event.updated_by) userIds.add(event.updated_by);
+        if (event.status_changed_by) userIds.add(event.status_changed_by);
+      });
+
+      // Batch fetch all profiles
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', Array.from(userIds));
+
+      // Create lookup maps for O(1) access
+      const profileMap = new Map(
+        profiles?.map(p => [p.id, p.full_name || p.email || 'Unknown']) || []
+      );
+
+      const ticketsCountMap = new Map<string, number>();
+      ticketsData.data?.forEach(t => {
+        ticketsCountMap.set(t.event_id, (ticketsCountMap.get(t.event_id) || 0) + 1);
+      });
+
+      const checkinsCountMap = new Map<string, number>();
+      checkinsData.data?.forEach(c => {
+        checkinsCountMap.set(c.event_id, (checkinsCountMap.get(c.event_id) || 0) + 1);
+      });
+
+      const wristbandsCountMap = new Map<string, number>();
+      wristbandsData.data?.forEach(w => {
+        wristbandsCountMap.set(w.event_id, (wristbandsCountMap.get(w.event_id) || 0) + 1);
+      });
+
+      // Count wristbands for series events
+      const seriesWristbandsCountMap = new Map<string, number>();
+      seriesWristbandsData.data?.forEach(w => {
+        if (w.series_id) {
+          seriesWristbandsCountMap.set(w.series_id, (seriesWristbandsCountMap.get(w.series_id) || 0) + 1);
+        }
+      });
+
+      // Count tickets for series events
+      const seriesTicketsCountMap = new Map<string, number>();
+      seriesTicketsData.data?.forEach(t => {
+        if (t.series_id) {
+          seriesTicketsCountMap.set(t.series_id, (seriesTicketsCountMap.get(t.series_id) || 0) + 1);
+        }
+      });
+
+      // Count check-ins for series events
+      const seriesCheckinsCountMap = new Map<string, number>();
+      seriesCheckinsData.data?.forEach(c => {
+        if (c.series_id) {
+          seriesCheckinsCountMap.set(c.series_id, (seriesCheckinsCountMap.get(c.series_id) || 0) + 1);
+        }
+      });
+
+      const seriesMap = new Map<string, any[]>();
+      seriesData.data?.forEach(s => {
+        const existing = seriesMap.get(s.main_event_id) || [];
+        existing.push({
+          ...s,
+          wristbands_count: seriesWristbandsCountMap.get(s.id) || 0,
+          tickets_count: seriesTicketsCountMap.get(s.id) || 0,
+          checked_in_count: seriesCheckinsCountMap.get(s.id) || 0,
+        });
+        seriesMap.set(s.main_event_id, existing);
+      });
+
+      // Enhance events using lookup maps (no additional queries!)
+      const enhancedEvents: EnhancedEvent[] = filteredData.map((event: any) => {
+        const ticketsSold = ticketsCountMap.get(event.id) || 0;
+        const ticketsRemaining = event.capacity && event.capacity > 0
+          ? event.capacity - ticketsSold
+          : null;
+
+        return {
+          ...event,
+          tickets_sold: ticketsSold,
+          tickets_remaining: ticketsRemaining,
+          checked_in_count: checkinsCountMap.get(event.id) || 0,
+          wristbands_count: wristbandsCountMap.get(event.id) || 0,
+          created_by_name: event.created_by ? profileMap.get(event.created_by) : null,
+          updated_by_name: event.updated_by ? profileMap.get(event.updated_by) : null,
+          status_changed_by_name: event.status_changed_by ? profileMap.get(event.status_changed_by) : null,
+          series: seriesMap.get(event.id) || []
+        } as EnhancedEvent;
+      });
+
+      setEvents(enhancedEvents);
+
+      const loadTime = performance.now() - startTime;
+      logger.info(`Loaded ${enhancedEvents.length} events in ${Math.round(loadTime)}ms`, 'EventsPage', {
+        eventCount: enhancedEvents.length,
+        loadTimeMs: Math.round(loadTime)
+      });
+
+    } catch (error) {
+      logger.error('Failed to fetch events', 'EventsPage', error);
+      setEvents([]);
+    } finally {
+      setLoading(false);
+    }
   }
+  
+
 
   const deleteEvent = async (id: string) => {
     const event = events.find(e => e.id === id)
     if (!event || !confirm(`Delete "${event.name}"? This cannot be undone.`)) return
+
+    // Check if user can manage (delete) this event
+    const canManage = await accessControlService.canManageEvent(id);
+    if (!canManage) {
+      alert('You do not have permission to delete this event');
+      return;
+    }
 
     setDeletingId(id)
     try {
@@ -80,33 +249,24 @@ const EventsPage = () => {
         supabase.from('wristbands').delete().eq('event_id', id),
         supabase.from('event_access').delete().eq('event_id', id)
       ])
-      
+
       const { error } = await supabase.from('events').delete().eq('id', id)
       if (error) throw error
-      
+
       setEvents(events.filter(e => e.id !== id))
+      logger.info('Event deleted successfully', 'EventsPage', { eventId: id });
     } catch (error) {
-      console.error('Error deleting event:', error)
+      logger.error('Failed to delete event', 'EventsPage', error, { eventId: id });
       alert('Failed to delete event')
     } finally {
       setDeletingId(null)
     }
   }
 
-  const getEventStatus = (event: Event) => {
-    const now = new Date()
-    const startDate = new Date(event.start_date)
-    const endDate = new Date(event.end_date)
-    
-    if (now >= startDate && now <= endDate) return 'active'
-    if (now > endDate) return 'past'
-    return 'upcoming'
-  }
-
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="flex items-center justify-center min-h-[400px]">
+        <LoadingSpinner size="lg" message="Loading events..." />
       </div>
     )
   }
@@ -125,162 +285,26 @@ const EventsPage = () => {
         </Link>
       </div>
 
-      {/* Filters */}
-      <div className="card">
-        <div className="card-body">
-          <div className="flex flex-col sm:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search events..."
-                  className="form-input pl-10"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </div>
-            
-            {/* Status Filter */}
-            <div className="sm:w-48">
-              <select
-                className="form-input form-select"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option value="all">All Events</option>
-                <option value="active">Active</option>
-                <option value="upcoming">Upcoming</option>
-                <option value="past">Past</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Events Table */}
-      {filteredEvents.length === 0 ? (
+      {events.length === 0 ? (
         <div className="card">
           <div className="card-body text-center py-12">
             <Calendar className="h-12 w-12 text-gray-300 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
-              {events.length === 0 ? 'No events yet' : 'No events match your filters'}
+              No events yet
             </h3>
             <p className="text-gray-600 mb-6">
-              {events.length === 0 
-                ? 'Get started by creating your first event'
-                : 'Try adjusting your search or filter criteria'
-              }
+              Get started by creating your first event
             </p>
-            {events.length === 0 && (
-              <Link to="/events/new" className="btn btn-primary">
-                <Plus className="h-4 w-4 mr-2" />
-                Create Event
-              </Link>
-            )}
+            <Link to="/events/new" className="btn btn-primary">
+              <Plus className="h-4 w-4 mr-2" />
+              Create Event
+            </Link>
           </div>
         </div>
       ) : (
         <div className="card">
-          <div className="overflow-x-auto">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Event</th>
-                  <th>Date Range</th>
-                  <th>Location</th>
-                  <th>Capacity</th>
-                  <th>Status</th>
-                  <th className="text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredEvents.map((event) => {
-                  const status = getEventStatus(event)
-                  const startDate = new Date(event.start_date)
-                  const endDate = new Date(event.end_date)
-
-                  return (
-                    <tr key={event.id}>
-                      <td>
-                        <Link
-                          to={`/events/${event.id}`}
-                          className="font-medium text-blue-600 hover:text-blue-700"
-                        >
-                          {event.name}
-                        </Link>
-                        {event.description && (
-                          <p className="text-sm text-gray-500 mt-1 line-clamp-1">
-                            {event.description}
-                          </p>
-                        )}
-                      </td>
-                      <td>
-                        <div className="text-sm">
-                          <div>{startDate.toLocaleDateString()}</div>
-                          <div className="text-gray-500">to {endDate.toLocaleDateString()}</div>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="flex items-center text-sm">
-                          {event.location ? (
-                            <>
-                              <MapPin className="h-3 w-3 mr-1 text-gray-400" />
-                              {event.location}
-                            </>
-                          ) : (
-                            <span className="text-gray-400">—</span>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="flex items-center text-sm">
-                          <Users className="h-3 w-3 mr-1 text-gray-400" />
-                          {event.total_capacity > 0 ? event.total_capacity : 'Unlimited'}
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`status-badge ${
-                          status === 'active' ? 'status-success' :
-                          status === 'upcoming' ? 'status-warning' :
-                          'status-neutral'
-                        }`}>
-                          {status === 'active' ? 'Active' :
-                           status === 'upcoming' ? 'Upcoming' :
-                           'Completed'}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="flex items-center justify-end space-x-2">
-                          <Link
-                            to={`/events/${event.id}/edit`}
-                            className="btn-ghost btn-sm p-2"
-                            title="Edit event"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Link>
-                          <button
-                            onClick={() => deleteEvent(event.id)}
-                            disabled={deletingId === event.id}
-                            className="btn-ghost btn-sm p-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            title="Delete event"
-                          >
-                            {deletingId === event.id ? (
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
-                            ) : (
-                              <Trash2 className="h-4 w-4" />
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <CompactEventsTable events={events} onDelete={deleteEvent} deletingId={deletingId} />
         </div>
       )}
     </div>

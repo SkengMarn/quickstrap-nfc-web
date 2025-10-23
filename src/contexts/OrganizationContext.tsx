@@ -35,56 +35,43 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
     try {
       setLoading(true);
 
-      // Temporary workaround for RLS policy infinite recursion issue
-      // Skip organization loading until database policies are fixed
-      console.warn('Organization loading temporarily disabled due to RLS policy issue');
-      
-      // Set mock organization data to prevent app crashes
-      const mockOrg: Organization = {
-        id: '00000000-0000-4000-8000-000000000001',
-        name: 'Default Organization',
-        slug: 'default-org',
-        description: 'Temporary organization while fixing database policies',
-        logo_url: null,
-        website: null,
-        primary_color: '#3B82F6',
-        secondary_color: '#1E40AF',
-        custom_domain: null,
-        subscription_tier: 'professional',
-        max_events: 100,
-        max_wristbands: 10000,
-        max_team_members: 50,
-        settings: {},
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        created_by: '00000000-0000-4000-8000-000000000003'
-      };
-      
-      const mockMembership: OrganizationMember = {
-        id: '00000000-0000-4000-8000-000000000002',
-        organization_id: '00000000-0000-4000-8000-000000000001',
-        user_id: '00000000-0000-4000-8000-000000000003',
-        role: 'owner',
-        permissions: {
-          events: 'admin',
-          wristbands: 'admin',
-          reports: 'admin'
-        },
-        status: 'active',
-        invited_by: null,
-        invited_at: null,
-        joined_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
+      // Fetch all organizations the user belongs to
+      const orgs = await organizationService.getUserOrganizations();
 
-      setAllOrganizations([mockOrg]);
-      setCurrentOrganization(mockOrg);
-      setUserMembership(mockMembership);
-      
+      if (orgs && orgs.length > 0) {
+        setAllOrganizations(orgs);
+
+        // Set current organization (use stored preference or first org)
+        const storedOrgId = localStorage.getItem('currentOrganizationId');
+        let currentOrg = orgs.find(o => o.id === storedOrgId) || orgs[0];
+
+        setCurrentOrganization(currentOrg);
+        organizationService.setCurrentOrganization(currentOrg.id);
+
+        // Load membership for current org
+        try {
+          const membership = await organizationService.getUserMembership(currentOrg.id);
+          setUserMembership(membership);
+        } catch (error) {
+          console.warn('Could not load membership:', error);
+          setUserMembership(null);
+        }
+      } else {
+        // No organizations found - user needs to create one
+        console.log('No organizations found for user');
+        setAllOrganizations([]);
+        setCurrentOrganization(null);
+        setUserMembership(null);
+      }
+
     } catch (error) {
       console.error('Failed to load organizations:', error);
-      // Set empty state on error
+
+      // If error is due to RLS, show helpful message
+      if (error && typeof error === 'object' && 'code' in error) {
+        console.error('Database error code:', (error as any).code);
+      }
+
       setAllOrganizations([]);
       setCurrentOrganization(null);
       setUserMembership(null);
@@ -99,8 +86,16 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
       setCurrentOrganization(org);
       organizationService.setCurrentOrganization(organizationId);
 
+      // Store preference
+      localStorage.setItem('currentOrganizationId', organizationId);
+
       // Reload membership for new org
-      organizationService.getUserMembership(organizationId).then(setUserMembership);
+      organizationService.getUserMembership(organizationId)
+        .then(setUserMembership)
+        .catch(err => {
+          console.warn('Could not load membership for switched org:', err);
+          setUserMembership(null);
+        });
     }
   };
 

@@ -15,6 +15,11 @@ fix-webhook*.js
 debug-telegram.sh
 check-telegram-webhook.js
 
+# Debug files (should not be in production)
+debug.html
+test-env.html
+minimal.html
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -253,8 +253,8 @@ const EventsPage = () => {
                         {event.location || '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {event.total_capacity > 0
-                          ? event.total_capacity
+                        {(event.capacity && event.capacity > 0)
+                          ? event.capacity
                           : 'Unlimited'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">

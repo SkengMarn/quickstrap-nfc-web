@@ -7,7 +7,6 @@ import {
   Download,
   Upload,
   Search,
-  Filter,
   Link as LinkIcon,
   Unlink,
   CheckCircle,
@@ -67,6 +66,8 @@ export default function TicketsPage() {
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState<string | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<TicketData | null>(null);
   const [sortField, setSortField] = useState<string>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [columnFilters, setColumnFilters] = useState({
@@ -621,8 +622,9 @@ export default function TicketsPage() {
                             <div className="py-1">
                               <button
                                 onClick={() => {
+                                  setSelectedTicket(ticket);
+                                  setShowDetailsModal(true);
                                   setShowActionsMenu(null);
-                                  // TODO: Implement view details
                                 }}
                                 className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
                               >
@@ -717,6 +719,151 @@ export default function TicketsPage() {
               <button
                 onClick={() => setShowUploadModal(false)}
                 className="px-4 py-2 text-gray-700 hover:text-gray-900"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Details Modal */}
+      {showDetailsModal && selectedTicket && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-gray-900">Guest Details</h3>
+              <button
+                onClick={() => {
+                  setShowDetailsModal(false);
+                  setSelectedTicket(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XCircle className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Status Badge */}
+              <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+                <h4 className="text-lg font-semibold text-gray-700">Status</h4>
+                <span className={`px-3 py-1 inline-flex text-sm leading-5 font-semibold rounded-full ${
+                  selectedTicket.status === 'linked'
+                    ? 'bg-green-100 text-green-800'
+                    : selectedTicket.status === 'cancelled'
+                    ? 'bg-red-100 text-red-800'
+                    : 'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {selectedTicket.status.toUpperCase()}
+                </span>
+              </div>
+
+              {/* Ticket Information */}
+              <div>
+                <h4 className="text-lg font-semibold text-gray-700 mb-3">Ticket Information</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Ticket Number</p>
+                    <p className="text-base font-medium text-gray-900">{selectedTicket.ticket_number}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Category</p>
+                    <p className="text-base font-medium text-gray-900">{selectedTicket.ticket_category}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Created</p>
+                    <p className="text-base font-medium text-gray-900">
+                      {new Date(selectedTicket.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Last Updated</p>
+                    <p className="text-base font-medium text-gray-900">
+                      {new Date(selectedTicket.updated_at).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Guest Information */}
+              <div>
+                <h4 className="text-lg font-semibold text-gray-700 mb-3">Guest Information</h4>
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Name</p>
+                    <p className="text-base font-medium text-gray-900">{selectedTicket.holder_name || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Email</p>
+                    <p className="text-base font-medium text-gray-900">{selectedTicket.holder_email || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Phone</p>
+                    <p className="text-base font-medium text-gray-900">{selectedTicket.holder_phone || 'Not provided'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Wristband Information */}
+              <div>
+                <h4 className="text-lg font-semibold text-gray-700 mb-3">Wristband Information</h4>
+                {selectedTicket.wristband ? (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-start space-x-3">
+                      <LinkIcon className="h-6 w-6 text-green-600 mt-1" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-green-900">Linked to Wristband</p>
+                        <div className="mt-2 space-y-2">
+                          <div>
+                            <p className="text-xs text-green-700">NFC ID</p>
+                            <p className="text-sm font-mono text-green-900">{selectedTicket.wristband.nfc_id}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-green-700">Category</p>
+                            <p className="text-sm text-green-900">{selectedTicket.wristband.category}</p>
+                          </div>
+                          {selectedTicket.linked_at && (
+                            <div>
+                              <p className="text-xs text-green-700">Linked At</p>
+                              <p className="text-sm text-green-900">
+                                {new Date(selectedTicket.linked_at).toLocaleString()}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex items-center space-x-2">
+                      <AlertCircle className="h-5 w-5 text-yellow-600" />
+                      <p className="text-sm text-yellow-800">No wristband linked to this ticket</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Event Information */}
+              {selectedTicket.event && (
+                <div>
+                  <h4 className="text-lg font-semibold text-gray-700 mb-3">Event</h4>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-base font-medium text-blue-900">{selectedTicket.event.name}</p>
+                    <p className="text-sm text-blue-700 mt-1">Event ID: {selectedTicket.event.id}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowDetailsModal(false);
+                  setSelectedTicket(null);
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
               >
                 Close
               </button>
