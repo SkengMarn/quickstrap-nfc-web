@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../services/supabase';
 import { organizationService } from '../../services/organizationService';
 import { useOrganization } from '../../contexts/OrganizationContext';
-import { Calendar, Shield, Settings, Users, Clock, Building, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, Shield, Settings, Users, Clock, Building, ChevronLeft, ChevronRight, MapPin, ChevronDown } from 'lucide-react';
 
 interface EventData {
   organization_id: string;
@@ -54,6 +54,9 @@ const EventCreationWizard: React.FC = () => {
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [showCreateOrg, setShowCreateOrg] = useState(false);
   const [newOrgName, setNewOrgName] = useState('');
+  const [existingLocations, setExistingLocations] = useState<string[]>([]);
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+  const [filteredLocations, setFilteredLocations] = useState<string[]>([]);
 
   const [eventData, setEventData] = useState<EventData>({
     organization_id: '',
@@ -106,13 +109,51 @@ const EventCreationWizard: React.FC = () => {
   // Load organizations on component mount
   useEffect(() => {
     loadOrganizations();
+    loadExistingLocations();
   }, []);
+
+  const loadExistingLocations = async () => {
+    try {
+      // Fetch distinct locations from both events and event_series
+      const { data: eventLocations } = await supabase
+        .from('events')
+        .select('location')
+        .not('location', 'is', null)
+        .not('location', 'eq', '');
+
+      const { data: seriesLocations } = await supabase
+        .from('event_series')
+        .select('location')
+        .not('location', 'is', null)
+        .not('location', 'eq', '');
+
+      // Combine and get unique locations
+      const allLocations = [
+        ...(eventLocations || []).map(e => e.location),
+        ...(seriesLocations || []).map(s => s.location)
+      ];
+      
+      const uniqueLocations = Array.from(new Set(allLocations)).sort();
+      setExistingLocations(uniqueLocations);
+    } catch (error) {
+      console.error('Error loading locations:', error);
+    }
+  };
 
   const loadOrganizations = async () => {
     try {
-      const orgs = await organizationService.getUserOrganizations();
+      // Add timeout to prevent infinite hanging (RLS recursion issue)
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Organization load timeout')), 5000)
+      );
+
+      const orgs = await Promise.race([
+        organizationService.getUserOrganizations(),
+        timeoutPromise
+      ]) as any[];
+
       setOrganizations(orgs);
-      
+
       // If user has a current organization, pre-select it
       if (currentOrganization && !eventData.organization_id) {
         setEventData(prev => ({
@@ -123,6 +164,18 @@ const EventCreationWizard: React.FC = () => {
       }
     } catch (error) {
       console.error('Error loading organizations:', error);
+      // Don't block the UI - set empty array and continue
+      setOrganizations([]);
+
+      // If we have currentOrganization from context, use it anyway
+      if (currentOrganization) {
+        setOrganizations([currentOrganization]);
+        setEventData(prev => ({
+          ...prev,
+          organization_id: currentOrganization.id,
+          organization_name: currentOrganization.name
+        }));
+      }
     }
   };
 
@@ -459,31 +512,85 @@ const EventCreationWizard: React.FC = () => {
         return (
           <div className="space-y-6">
             <h3 className="text-lg font-semibold">Event Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Event Name *
-                </label>
-                <input
-                  type="text"
-                  value={eventData.name}
-                  onChange={(e) => setEventData({...eventData, name: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter event name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+            
+            {/* Event Name - Full Width */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Event Name *
+              </label>
+              <input
+                type="text"
+                value={eventData.name}
+                onChange={(e) => setEventData({...eventData, name: e.target.value})}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter event name"
+              />
+            </div>
+
+            {/* Location - Full Width with Dropdown */}
+            <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
                   Location *
+                  <span className="text-xs text-gray-500 font-normal">(Type or select from existing)</span>
                 </label>
+                <div>
                 <input
                   type="text"
                   value={eventData.location}
-                  onChange={(e) => setEventData({...eventData, location: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Event location"
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setEventData({...eventData, location: value});
+                    
+                    // Filter locations based on input
+                    if (value.trim()) {
+                      const filtered = existingLocations.filter(loc => 
+                        loc.toLowerCase().includes(value.toLowerCase())
+                      );
+                      setFilteredLocations(filtered);
+                      setShowLocationDropdown(filtered.length > 0);
+                    } else {
+                      setFilteredLocations(existingLocations);
+                      setShowLocationDropdown(existingLocations.length > 0);
+                    }
+                  }}
+                  onFocus={() => {
+                    setFilteredLocations(existingLocations);
+                    setShowLocationDropdown(existingLocations.length > 0);
+                  }}
+                  onBlur={() => {
+                    // Delay to allow click on dropdown item
+                    setTimeout(() => setShowLocationDropdown(false), 200);
+                  }}
+                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Type or select existing location"
                 />
-              </div>
+                
+                {/* Dropdown with existing locations */}
+                {showLocationDropdown && filteredLocations.length > 0 && (
+                  <div className="absolute left-0 right-0 z-50 mt-1 bg-white border border-gray-300 rounded-md shadow-xl max-h-60 overflow-y-auto">
+                    <div className="py-1">
+                      {filteredLocations.map((location, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => {
+                            setEventData({...eventData, location});
+                            setShowLocationDropdown(false);
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                        >
+                          {location}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                </div>
+            </div>
+
+            {/* Dates - Two Column Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Start Date *

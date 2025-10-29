@@ -24,6 +24,9 @@ const EventDetailsPage = () => {
   interface EventStats {
     totalWristbands: number;
     checkedIn: number;
+    activated: number;
+    linked: number;
+    blocked: number;
     categories: Array<{
       name: string;
       total: number;
@@ -35,6 +38,9 @@ const EventDetailsPage = () => {
   const [stats, setStats] = useState<EventStats>({
     totalWristbands: 0,
     checkedIn: 0,
+    activated: 0,
+    linked: 0,
+    blocked: 0,
     categories: [],
   })
   const [accessUsers, setAccessUsers] = useState<any[]>([])
@@ -175,13 +181,13 @@ const EventDetailsPage = () => {
       
       setEvent(eventData)
       
-      // Fetch wristbands stats
+      // Fetch wristbands stats with full details
       // For series events: filter by series_id
       // For parent events: filter by event_id AND series_id IS NULL (exclude series wristbands)
       const isSeries = (eventData as any).is_series;
       let wristbandsQuery = supabase
         .from('wristbands')
-        .select('id, category, is_active');
+        .select('id, category, is_active, status, linked_ticket_id');
       
       if (isSeries) {
         // Series event: get wristbands with this series_id
@@ -212,6 +218,9 @@ const EventDetailsPage = () => {
       // Calculate stats
       const totalWristbands = wristbands?.length || 0
       const checkedIn = checkins?.length || 0
+      const activated = wristbands?.filter(wb => wb.status === 'activated' || wb.status === 'checked-in').length || 0
+      const linked = wristbands?.filter(wb => wb.linked_ticket_id).length || 0
+      const blocked = wristbands?.filter(wb => wb.status === 'blocked').length || 0
 
       // Group by category
       const categoriesMap = new Map<string, { total: number; checkedIn: number }>()
@@ -235,6 +244,9 @@ const EventDetailsPage = () => {
       setStats({
         totalWristbands,
         checkedIn,
+        activated,
+        linked,
+        blocked,
         categories: categoriesArray,
       })
 
@@ -1000,7 +1012,7 @@ const EventDetailsPage = () => {
                 </div>
                 <div className="card">
                   <div className="card-body text-center">
-                    <p className="text-2xl font-bold text-green-600">{Math.round(stats.totalWristbands * 0.85)}</p>
+                    <p className="text-2xl font-bold text-green-600">{stats.activated}</p>
                     <p className="text-sm text-gray-600">Activated</p>
                   </div>
                 </div>
@@ -1012,13 +1024,13 @@ const EventDetailsPage = () => {
                 </div>
                 <div className="card">
                   <div className="card-body text-center">
-                    <p className="text-2xl font-bold text-purple-600">{Math.round(stats.totalWristbands * 0.75)}</p>
+                    <p className="text-2xl font-bold text-purple-600">{stats.linked}</p>
                     <p className="text-sm text-gray-600">Linked to Tickets</p>
                   </div>
                 </div>
                 <div className="card">
                   <div className="card-body text-center">
-                    <p className="text-2xl font-bold text-red-600">0</p>
+                    <p className="text-2xl font-bold text-red-600">{stats.blocked}</p>
                     <p className="text-sm text-gray-600">Blocked</p>
                   </div>
                 </div>
@@ -1122,11 +1134,11 @@ const EventDetailsPage = () => {
                       <div className="pt-4 border-t">
                         <div className="grid grid-cols-2 gap-4 text-center">
                           <div>
-                            <p className="text-lg font-semibold text-blue-600">{Math.round(stats.totalWristbands * 0.75)}</p>
+                            <p className="text-lg font-semibold text-blue-600">{stats.linked}</p>
                             <p className="text-xs text-gray-500">Linked</p>
                           </div>
                           <div>
-                            <p className="text-lg font-semibold text-orange-600">{Math.round(stats.totalWristbands * 0.25)}</p>
+                            <p className="text-lg font-semibold text-orange-600">{stats.totalWristbands - stats.linked}</p>
                             <p className="text-xs text-gray-500">Unlinked</p>
                           </div>
                         </div>

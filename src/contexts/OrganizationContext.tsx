@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Organization, OrganizationMember, OrgRole } from '../types/phase1';
 import organizationService from '../services/organizationService';
+import { supabase } from '../services/supabase';
+import { safeQuery, checkSystemHealth } from '../utils/selfHealing';
 
 interface OrganizationContextType {
   currentOrganization: Organization | null;
@@ -35,8 +37,23 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
     try {
       setLoading(true);
 
-      // Fetch all organizations the user belongs to
-      const orgs = await organizationService.getUserOrganizations();
+      // Check if user is authenticated first
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('No authenticated user, skipping organization load');
+        setLoading(false);
+        return;
+      }
+
+      // Use safeQuery with circuit breaker and timeout protection
+      const orgs = await safeQuery(
+        () => organizationService.getUserOrganizations(),
+        {
+          operationName: 'getUserOrganizations',
+          critical: true,
+          fallback: () => [],
+        }
+      );
 
       if (orgs && orgs.length > 0) {
         setAllOrganizations(orgs);
@@ -48,9 +65,16 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
         setCurrentOrganization(currentOrg);
         organizationService.setCurrentOrganization(currentOrg.id);
 
-        // Load membership for current org
+        // Load membership for current org with protection
         try {
-          const membership = await organizationService.getUserMembership(currentOrg.id);
+          const membership = await safeQuery(
+            () => organizationService.getUserMembership(currentOrg.id),
+            {
+              operationName: 'getUserMembership',
+              critical: false,
+              fallback: () => null,
+            }
+          );
           setUserMembership(membership);
         } catch (error) {
           console.warn('Could not load membership:', error);
@@ -70,6 +94,14 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
       // If error is due to RLS, show helpful message
       if (error && typeof error === 'object' && 'code' in error) {
         console.error('Database error code:', (error as any).code);
+      }
+
+      // Check if this is a circuit breaker error
+      if (error instanceof Error && error.message.includes('Circuit breaker is OPEN')) {
+        console.error('Circuit breaker is OPEN. System is in fail-safe mode.');
+
+        // Trigger system health check in background
+        checkSystemHealth().catch(console.error);
       }
 
       setAllOrganizations([]);
@@ -104,7 +136,20 @@ export const OrganizationProvider: React.FC<OrganizationProviderProps> = ({ chil
   };
 
   useEffect(() => {
-    loadOrganizations();
+    // Load organizations with self-healing protection
+    console.log('OrganizationContext: Loading organizations with self-healing protection');
+
+    // Safety timeout as last resort
+    const safetyTimeoutId = setTimeout(() => {
+      console.error('Organization load safety timeout - forcing loading to false');
+      setLoading(false);
+    }, 12000); // 12s absolute max
+
+    loadOrganizations().finally(() => {
+      clearTimeout(safetyTimeoutId);
+    });
+
+    return () => clearTimeout(safetyTimeoutId);
   }, []);
 
   return (

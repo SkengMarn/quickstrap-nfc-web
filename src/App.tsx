@@ -10,8 +10,9 @@ import './styles/design-system.css';
 // Eager load only critical components
 import DashboardLayout from './components/layout/DashboardLayout';
 import LoadingScreen from './components/common/LoadingScreen';
-import ErrorBoundary from './components/common/ErrorBoundary';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { OrganizationProvider } from './contexts/OrganizationContext';
+import { checkSystemHealth } from './utils/selfHealing';
 
 // Lazy load all pages for better performance
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -49,15 +50,31 @@ export const App = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [showTour, setShowTour] = useState(false);
+  const [systemHealthy, setSystemHealthy] = useState(true);
 
   useEffect(() => {
-    // Add timeout to prevent infinite loading
+    // Run system health check on startup
+    console.log('[App] Running startup system health check...');
+    checkSystemHealth()
+      .then(health => {
+        setSystemHealthy(health.healthy);
+        if (!health.healthy) {
+          console.error('[App] System health check failed on startup:', health.errors);
+        } else {
+          console.log('[App] System health check passed');
+        }
+      })
+      .catch(error => {
+        console.error('[App] System health check error:', error);
+        setSystemHealthy(false);
+      });
+
+    // Initialize auth with timeout protection
     const timeout = setTimeout(() => {
       console.warn('Auth initialization timeout, proceeding without session');
       setLoading(false);
-    }, 10000); // 10 second timeout
+    }, 8000); // 8 second timeout for auth
 
-    // Get initial session with error handling
     supabase.auth.getSession()
       .then(({ data: { session }, error }) => {
         clearTimeout(timeout);
@@ -74,7 +91,6 @@ export const App = () => {
         setLoading(false);
       });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -97,7 +113,26 @@ export const App = () => {
   };
 
   return (
-    <ErrorBoundary>
+    <ErrorBoundary enableAutoRecovery={true}>
+      {/* Show warning banner if system is unhealthy */}
+      {!systemHealthy && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: '#f59e0b',
+          color: 'white',
+          padding: '8px 16px',
+          textAlign: 'center',
+          zIndex: 9999,
+          fontSize: '14px',
+          fontWeight: 'bold',
+        }}>
+          System health check failed. Some features may not work correctly. Self-healing in progress...
+        </div>
+      )}
+
       {/* Interactive Tour */}
       {session && showTour && (
         <InteractiveTour

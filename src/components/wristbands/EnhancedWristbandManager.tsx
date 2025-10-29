@@ -259,13 +259,49 @@ const EnhancedWristbandManager: React.FC<EnhancedWristbandManagerProps> = ({ eve
   const bulkUpdateStatus = async (status: 'active' | 'inactive' | 'blocked') => {
     if (selectedWristbands.size === 0) return;
 
+    let blockReason = '';
+    
+    // If blocking, ask for a reason
+    if (status === 'blocked') {
+      blockReason = prompt('Please provide a reason for blocking these wristbands:') || '';
+      if (!blockReason.trim()) {
+        alert('Block reason is required');
+        return;
+      }
+    }
+
     try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Update wristband status
       const { error } = await supabase
         .from('wristbands')
         .update({ status })
         .in('id', Array.from(selectedWristbands));
 
       if (error) throw error;
+
+      // If blocking, create wristband_blocks entries
+      if (status === 'blocked') {
+        const blockEntries = Array.from(selectedWristbands).map(wristbandId => ({
+          wristband_id: wristbandId,
+          event_id: eventId,
+          reason: blockReason,
+          blocked_by: user.id,
+          blocked_at: new Date().toISOString()
+        }));
+
+        const { error: blockError } = await supabase
+          .from('wristband_blocks')
+          .insert(blockEntries);
+
+        if (blockError) {
+          console.error('Error creating block records:', blockError);
+          // Don't fail the whole operation if block records fail
+        }
+      }
 
       await fetchWristbands();
       setSelectedWristbands(new Set());

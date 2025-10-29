@@ -14,12 +14,32 @@ import {
 export const organizationService = {
   /**
    * Get all organizations the current user belongs to
+   * Super admins and admins get ALL organizations
+   * Regular users only get organizations they are members of
    */
   async getUserOrganizations(): Promise<Organization[]> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
-    // Try to fetch organizations user created
+    // Check if user is super admin or admin
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    // Super admins and admins get ALL organizations
+    if (profile && (profile.role === 'super_admin' || profile.role === 'admin')) {
+      const { data: allOrgs, error } = await supabase
+        .from('organizations')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return allOrgs || [];
+    }
+
+    // Regular users: fetch organizations they created or are members of
     const { data: createdOrgs, error: createdError } = await supabase
       .from('organizations')
       .select('*')
