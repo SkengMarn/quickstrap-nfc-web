@@ -69,7 +69,7 @@ export default function OrganizationPage() {
 
     try {
       await organizationService.inviteMember({
-        organization_id: currentOrganization.id,
+        organizationId: currentOrganization.id,
         email: inviteEmail,
         role: inviteRole
       });
@@ -89,7 +89,7 @@ export default function OrganizationPage() {
     if (!currentOrganization) return;
 
     try {
-      await organizationService.updateMemberRole(currentOrganization.id, userId, newRole);
+      await organizationService.updateMember(userId, { role: newRole });
       toast.success('Member role updated');
       await fetchMembers();
     } catch (error) {
@@ -103,7 +103,7 @@ export default function OrganizationPage() {
     if (!confirm('Are you sure you want to remove this member?')) return;
 
     try {
-      await organizationService.removeMember(currentOrganization.id, userId);
+      await organizationService.removeMember(userId);
       toast.success('Member removed');
       await fetchMembers();
     } catch (error) {

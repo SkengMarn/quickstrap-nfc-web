@@ -293,14 +293,17 @@ const EventDetailsPage = () => {
 
       if (error) throw error
 
-      const activityItems = recentCheckins?.map(checkin => ({
-        id: checkin.id,
-        type: 'checkin',
-        message: `${checkin.wristbands?.nfc_id || 'Unknown Wristband'} checked in${checkin.gate_id ? ` at Gate ${checkin.gate_id.slice(-4)}` : ''}`,
-        category: checkin.wristbands?.category || 'Unknown',
-        timestamp: checkin.timestamp,
-        timeAgo: getTimeAgo(new Date(checkin.timestamp))
-      })) || []
+      const activityItems = recentCheckins?.map(checkin => {
+        const wristband = Array.isArray(checkin.wristbands) ? checkin.wristbands[0] : checkin.wristbands;
+        return {
+          id: checkin.id,
+          type: 'checkin',
+          message: `${wristband?.nfc_id || 'Unknown Wristband'} checked in${checkin.gate_id ? ` at Gate ${checkin.gate_id.slice(-4)}` : ''}`,
+          category: wristband?.category || 'Unknown',
+          timestamp: checkin.timestamp,
+          timeAgo: getTimeAgo(new Date(checkin.timestamp))
+        };
+      }) || []
 
       setRecentActivity(activityItems)
     } catch (error) {
@@ -1807,9 +1810,7 @@ const EventDetailsPage = () => {
           {/* Fraud Detection Tab */}
           {activeTab === 'fraud' && event && (
             <FraudDetectionSystem 
-              eventId={(event as any).is_series ? (event as any).main_event_id : event.id}
-              isSeries={(event as any).is_series || false}
-              seriesId={(event as any).is_series ? event.id : undefined}
+              eventId={event.id}
             />
           )}
 
@@ -1825,10 +1826,8 @@ const EventDetailsPage = () => {
           {/* Export Tab */}
           {activeTab === 'export' && event && (
             <ExportReportingSystem 
-              eventId={(event as any).is_series ? (event as any).main_event_id : event.id}
+              eventId={event.id}
               eventName={event.name}
-              isSeries={(event as any).is_series || false}
-              seriesId={(event as any).is_series ? event.id : undefined}
             />
           )}
 

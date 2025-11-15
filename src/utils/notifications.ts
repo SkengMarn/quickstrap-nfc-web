@@ -11,7 +11,7 @@ import type {
 } from '../types/notification.types';
 
 // Default toast options
-const defaultToastOptions: Omit<ToastOptions, 'draggable'> & { draggable: boolean } = {
+const defaultToastOptions: Partial<ToastOptions> = {
   position: 'top-right',
   autoClose: 5000,
   hideProgressBar: false,
@@ -62,7 +62,8 @@ const createSystemNotification = (
       ...defaultToastOptions,
       ...config.toastOptions,
       type: mapSeverityToType(severity),
-    },
+      progress: undefined,
+    } as ToastOptions,
   };
 
   if (notification.logToConsole) {
@@ -106,7 +107,8 @@ const createFunctionalNotification = (
       type: mapSeverityToType(severity),
       'data-entity': config.entity,
       'data-operation': config.operation,
-    },
+      progress: undefined,
+    } as ToastOptions,
   };
 
   if (notification.logToConsole) {

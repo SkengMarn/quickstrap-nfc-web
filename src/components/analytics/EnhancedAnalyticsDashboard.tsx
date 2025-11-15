@@ -309,11 +309,11 @@ const EnhancedAnalyticsDashboard: React.FC<EnhancedAnalyticsDashboardProps> = ({
             </p>
           </div>
           <div className="flex items-center space-x-3">
-            <Button onClick={handleRefresh} disabled={refreshing} variant="outline" size="sm">
+            <Button onClick={handleRefresh} disabled={refreshing} variant="outline" size="sm" type="button">
               <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            <Button onClick={handleExport} variant="default" size="sm">
+            <Button onClick={handleExport} variant="default" size="sm" type="button">
               <Download className="w-4 h-4 mr-2" />
               Export Report
             </Button>
@@ -416,6 +416,7 @@ const EnhancedAnalyticsDashboard: React.FC<EnhancedAnalyticsDashboardProps> = ({
                       variant={timeInterval === 'hour' ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => setTimeInterval('hour')}
+                      type="button"
                     >
                       Hourly
                     </Button>
@@ -423,6 +424,7 @@ const EnhancedAnalyticsDashboard: React.FC<EnhancedAnalyticsDashboardProps> = ({
                       variant={timeInterval === 'day' ? 'default' : 'outline'}
                       size="sm"
                       onClick={() => setTimeInterval('day')}
+                      type="button"
                     >
                       Daily
                     </Button>

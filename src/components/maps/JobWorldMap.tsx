@@ -164,7 +164,7 @@ const JobWorldMap: React.FC<JobWorldMapProps> = ({
         <ZoomableGroup zoom={1}>
           <Graticule stroke="#F1F1F1" strokeWidth={0.5} />
           <Geographies geography={geoUrl}>
-            {({ geographies }) =>
+            {({ geographies }: { geographies: any[] }) =>
               geographies.map((geo: any) => {
                 const countryCode = geo.properties.ISO_A3 || geo.properties.ADM0_A3;
                 const countryData = countryDataMap.get(countryCode);

@@ -50,37 +50,37 @@ USING (
   )
 );
 
--- INSERT: Only organization owners/admins/super_admins can add members
+-- INSERT: Only organization owners/admins can add members
 CREATE POLICY "org_members_insert"
 ON organization_members
 FOR INSERT
 TO authenticated
 WITH CHECK (
   EXISTS (
-    SELECT 1 
+    SELECT 1
     FROM organization_members om
     WHERE om.organization_id = organization_members.organization_id
       AND om.user_id = auth.uid()
-      AND om.role IN ('owner', 'admin', 'super_admin')
+      AND om.role IN ('owner', 'admin')
   )
 );
 
--- UPDATE: Only organization owners/admins/super_admins can update members
+-- UPDATE: Only organization owners/admins can update members
 CREATE POLICY "org_members_update"
 ON organization_members
 FOR UPDATE
 TO authenticated
 USING (
   EXISTS (
-    SELECT 1 
+    SELECT 1
     FROM organization_members om
     WHERE om.organization_id = organization_members.organization_id
       AND om.user_id = auth.uid()
-      AND om.role IN ('owner', 'admin', 'super_admin')
+      AND om.role IN ('owner', 'admin')
   )
 );
 
--- DELETE: Owners/admins/super_admins can remove members, users can remove themselves
+-- DELETE: Owners/admins can remove members, users can remove themselves
 CREATE POLICY "org_members_delete"
 ON organization_members
 FOR DELETE
@@ -89,11 +89,11 @@ USING (
   user_id = auth.uid()
   OR
   EXISTS (
-    SELECT 1 
+    SELECT 1
     FROM organization_members om
     WHERE om.organization_id = organization_members.organization_id
       AND om.user_id = auth.uid()
-      AND om.role IN ('owner', 'admin', 'super_admin')
+      AND om.role IN ('owner', 'admin')
   )
 );
 
@@ -142,31 +142,31 @@ FOR INSERT
 TO authenticated
 WITH CHECK (auth.uid() IS NOT NULL);
 
--- UPDATE: Only organization owners/admins/super_admins can update
+-- UPDATE: Only organization owners/admins can update
 CREATE POLICY "orgs_update"
 ON organizations
 FOR UPDATE
 TO authenticated
 USING (
   id IN (
-    SELECT organization_id 
-    FROM organization_members 
-    WHERE user_id = auth.uid() 
-      AND role IN ('owner', 'admin', 'super_admin')
+    SELECT organization_id
+    FROM organization_members
+    WHERE user_id = auth.uid()
+      AND role IN ('owner', 'admin')
   )
 );
 
--- DELETE: Only organization owners/super_admins can delete
+-- DELETE: Only organization owners can delete
 CREATE POLICY "orgs_delete"
 ON organizations
 FOR DELETE
 TO authenticated
 USING (
   id IN (
-    SELECT organization_id 
-    FROM organization_members 
-    WHERE user_id = auth.uid() 
-      AND role IN ('owner', 'super_admin')
+    SELECT organization_id
+    FROM organization_members
+    WHERE user_id = auth.uid()
+      AND role = 'owner'
   )
 );
 

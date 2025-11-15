@@ -8,7 +8,7 @@ interface EventEditPageProps {
 
 const EventEditPage: React.FC<EventEditPageProps> = ({ isSeries = false }) => {
   useParams<{ id: string }>();
-  return <EventForm isEdit={true} isSeries={isSeries} />;
+  return <EventForm isEdit={true} />;
 };
 
 export default EventEditPage;

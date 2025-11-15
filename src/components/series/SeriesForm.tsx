@@ -239,7 +239,7 @@ export default function SeriesForm({ eventId, organizationId, series, onClose, o
         description: formData.description || undefined,
         start_date: startDate.toISOString(),
         end_date: endDate.toISOString(),
-        sequence_number: autoSequenceNumber,
+        sequence_number: autoSequenceNumber || undefined,
         series_type: formData.series_type,
         checkin_window_start_offset: `${formData.checkin_window_start} hours`,
         checkin_window_end_offset: `${formData.checkin_window_end} hours`,

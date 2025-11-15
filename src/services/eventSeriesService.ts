@@ -190,7 +190,7 @@ class EventSeriesService {
   /**
    * Get a single series by ID
    */
-  async getSeriesById(seriesId: string) {
+  async getSeriesById(seriesId: string): Promise<{ data: EventSeries | null; error: any }> {
     try {
       const { data, error } = await supabase
         .from('event_series')

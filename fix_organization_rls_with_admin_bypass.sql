@@ -1,0 +1,322 @@
+-- UPDATED FIX: RLS policies with super admin/admin bypass
+-- Super admins and admins can access ALL organizations without being members
+-- Regular users can only access organizations they are members of
+
+BEGIN;
+
+-- ============================================================================
+-- STEP 1: Fix organization_members table
+-- ============================================================================
+
+-- Drop all existing policies on organization_members
+DROP POLICY IF EXISTS "Users can view their organization memberships" ON organization_members;
+DROP POLICY IF EXISTS "Users can view organization members" ON organization_members;
+DROP POLICY IF EXISTS "Organization admins can manage members" ON organization_members;
+DROP POLICY IF EXISTS "Organization owners can manage members" ON organization_members;
+DROP POLICY IF EXISTS "Users can insert their own membership" ON organization_members;
+DROP POLICY IF EXISTS "Users can update their own membership" ON organization_members;
+DROP POLICY IF EXISTS "Users can delete their own membership" ON organization_members;
+DROP POLICY IF EXISTS "organization_members_select_policy" ON organization_members;
+DROP POLICY IF EXISTS "organization_members_insert_policy" ON organization_members;
+DROP POLICY IF EXISTS "organization_members_update_policy" ON organization_members;
+DROP POLICY IF EXISTS "organization_members_delete_policy" ON organization_members;
+DROP POLICY IF EXISTS "organization_members_select_simple" ON organization_members;
+DROP POLICY IF EXISTS "organization_members_insert_simple" ON organization_members;
+DROP POLICY IF EXISTS "organization_members_update_simple" ON organization_members;
+DROP POLICY IF EXISTS "organization_members_delete_simple" ON organization_members;
+DROP POLICY IF EXISTS "org_members_select" ON organization_members;
+DROP POLICY IF EXISTS "org_members_insert" ON organization_members;
+DROP POLICY IF EXISTS "org_members_update" ON organization_members;
+DROP POLICY IF EXISTS "org_members_delete" ON organization_members;
+
+-- Enable RLS
+ALTER TABLE organization_members ENABLE ROW LEVEL SECURITY;
+
+-- SELECT: Super admins/admins can see all, regular users see their orgs only
+CREATE POLICY "org_members_select"
+ON organization_members
+FOR SELECT
+TO authenticated
+USING (
+  -- Super admins and admins can see all organization members
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid()
+    AND profiles.role IN ('super_admin', 'admin')
+  )
+  OR
+  -- Regular users can see their own membership
+  user_id = auth.uid()
+  OR
+  -- Regular users can see members of organizations they belong to
+  organization_id IN (
+    SELECT organization_id
+    FROM organization_members
+    WHERE user_id = auth.uid()
+  )
+);
+
+-- INSERT: Super admins/admins can add anyone, org owners/admins can add to their org
+CREATE POLICY "org_members_insert"
+ON organization_members
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  -- Super admins and admins can add members to any organization
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid()
+    AND profiles.role IN ('super_admin', 'admin')
+  )
+  OR
+  -- Organization owners/admins can add members to their organization
+  EXISTS (
+    SELECT 1
+    FROM organization_members om
+    WHERE om.organization_id = organization_members.organization_id
+      AND om.user_id = auth.uid()
+      AND om.role IN ('owner', 'admin')
+  )
+);
+
+-- UPDATE: Super admins/admins can update anyone, org owners/admins can update their org
+CREATE POLICY "org_members_update"
+ON organization_members
+FOR UPDATE
+TO authenticated
+USING (
+  -- Super admins and admins can update any membership
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid()
+    AND profiles.role IN ('super_admin', 'admin')
+  )
+  OR
+  -- Organization owners/admins can update members in their organization
+  EXISTS (
+    SELECT 1
+    FROM organization_members om
+    WHERE om.organization_id = organization_members.organization_id
+      AND om.user_id = auth.uid()
+      AND om.role IN ('owner', 'admin')
+  )
+);
+
+-- DELETE: Super admins/admins can remove anyone, org owners/admins can remove from their org
+CREATE POLICY "org_members_delete"
+ON organization_members
+FOR DELETE
+TO authenticated
+USING (
+  -- Super admins and admins can remove any membership
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid()
+    AND profiles.role IN ('super_admin', 'admin')
+  )
+  OR
+  -- Users can remove themselves
+  user_id = auth.uid()
+  OR
+  -- Organization owners/admins can remove members from their organization
+  EXISTS (
+    SELECT 1
+    FROM organization_members om
+    WHERE om.organization_id = organization_members.organization_id
+      AND om.user_id = auth.uid()
+      AND om.role IN ('owner', 'admin')
+  )
+);
+
+-- ============================================================================
+-- STEP 2: Fix organizations table
+-- ============================================================================
+
+-- Drop all existing policies on organizations
+DROP POLICY IF EXISTS "Users can view their organizations" ON organizations;
+DROP POLICY IF EXISTS "Users can create organizations" ON organizations;
+DROP POLICY IF EXISTS "Organization owners can update" ON organizations;
+DROP POLICY IF EXISTS "Organization owners can delete" ON organizations;
+DROP POLICY IF EXISTS "organizations_select_policy" ON organizations;
+DROP POLICY IF EXISTS "organizations_insert_policy" ON organizations;
+DROP POLICY IF EXISTS "organizations_update_policy" ON organizations;
+DROP POLICY IF EXISTS "organizations_delete_policy" ON organizations;
+DROP POLICY IF EXISTS "organizations_select_simple" ON organizations;
+DROP POLICY IF EXISTS "organizations_insert_simple" ON organizations;
+DROP POLICY IF EXISTS "organizations_update_simple" ON organizations;
+DROP POLICY IF EXISTS "organizations_delete_simple" ON organizations;
+DROP POLICY IF EXISTS "orgs_select" ON organizations;
+DROP POLICY IF EXISTS "orgs_insert" ON organizations;
+DROP POLICY IF EXISTS "orgs_update" ON organizations;
+DROP POLICY IF EXISTS "orgs_delete" ON organizations;
+
+-- Enable RLS
+ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
+
+-- SELECT: Super admins/admins can see all organizations, regular users see their orgs
+CREATE POLICY "orgs_select"
+ON organizations
+FOR SELECT
+TO authenticated
+USING (
+  -- Super admins and admins can see all organizations
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid()
+    AND profiles.role IN ('super_admin', 'admin')
+  )
+  OR
+  -- Regular users can see organizations they are members of
+  id IN (
+    SELECT organization_id
+    FROM organization_members
+    WHERE user_id = auth.uid()
+  )
+);
+
+-- INSERT: Super admins/admins and any authenticated user can create organizations
+CREATE POLICY "orgs_insert"
+ON organizations
+FOR INSERT
+TO authenticated
+WITH CHECK (auth.uid() IS NOT NULL);
+
+-- UPDATE: Super admins/admins can update any org, org owners/admins can update their org
+CREATE POLICY "orgs_update"
+ON organizations
+FOR UPDATE
+TO authenticated
+USING (
+  -- Super admins and admins can update any organization
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid()
+    AND profiles.role IN ('super_admin', 'admin')
+  )
+  OR
+  -- Organization owners/admins can update their organization
+  id IN (
+    SELECT organization_id
+    FROM organization_members
+    WHERE user_id = auth.uid()
+      AND role IN ('owner', 'admin')
+  )
+);
+
+-- DELETE: Super admins/admins can delete any org, org owners can delete their org
+CREATE POLICY "orgs_delete"
+ON organizations
+FOR DELETE
+TO authenticated
+USING (
+  -- Super admins and admins can delete any organization
+  EXISTS (
+    SELECT 1 FROM profiles
+    WHERE profiles.id = auth.uid()
+    AND profiles.role IN ('super_admin', 'admin')
+  )
+  OR
+  -- Organization owners can delete their organization
+  id IN (
+    SELECT organization_id
+    FROM organization_members
+    WHERE user_id = auth.uid()
+      AND role = 'owner'
+  )
+);
+
+COMMIT;
+
+-- ============================================================================
+-- VERIFICATION
+-- ============================================================================
+
+-- Show all policies for both tables
+SELECT
+  tablename,
+  policyname,
+  cmd,
+  CASE
+    WHEN qual IS NOT NULL THEN 'Has USING clause'
+    ELSE 'No USING clause'
+  END as using_clause,
+  CASE
+    WHEN with_check IS NOT NULL THEN 'Has WITH CHECK clause'
+    ELSE 'No WITH CHECK clause'
+  END as with_check_clause
+FROM pg_policies
+WHERE tablename IN ('organizations', 'organization_members')
+ORDER BY tablename, policyname;
+
+-- Test query to verify organizations can be loaded
+SELECT
+  o.id,
+  o.name,
+  o.created_at,
+  COUNT(om.user_id) as member_count
+FROM organizations o
+LEFT JOIN organization_members om ON om.organization_id = o.id
+GROUP BY o.id, o.name, o.created_at
+ORDER BY o.created_at DESC;
+
+-- ============================================================================
+-- EXECUTION VERIFICATION
+-- ============================================================================
+
+DO $$
+DECLARE
+  org_count INTEGER;
+  org_member_count INTEGER;
+  org_policies_count INTEGER;
+  org_member_policies_count INTEGER;
+  admin_count INTEGER;
+BEGIN
+  -- Count organizations
+  SELECT COUNT(*) INTO org_count FROM organizations;
+
+  -- Count organization members
+  SELECT COUNT(*) INTO org_member_count FROM organization_members;
+
+  -- Count policies on organizations table
+  SELECT COUNT(*) INTO org_policies_count
+  FROM pg_policies
+  WHERE tablename = 'organizations';
+
+  -- Count policies on organization_members table
+  SELECT COUNT(*) INTO org_member_policies_count
+  FROM pg_policies
+  WHERE tablename = 'organization_members';
+
+  -- Count super admins and admins
+  SELECT COUNT(*) INTO admin_count
+  FROM profiles
+  WHERE role IN ('super_admin', 'admin');
+
+  -- Display results
+  RAISE NOTICE '========================================';
+  RAISE NOTICE 'FIX EXECUTION VERIFICATION';
+  RAISE NOTICE '========================================';
+  RAISE NOTICE 'Organizations table: % organizations found', org_count;
+  RAISE NOTICE 'Organization members table: % members found', org_member_count;
+  RAISE NOTICE 'Super admins/admins: % users with admin access', admin_count;
+  RAISE NOTICE 'Organizations policies: % policies created', org_policies_count;
+  RAISE NOTICE 'Organization members policies: % policies created', org_member_policies_count;
+  RAISE NOTICE '========================================';
+
+  IF org_policies_count = 4 AND org_member_policies_count = 4 THEN
+    RAISE NOTICE '✅ SUCCESS: All policies created correctly!';
+    RAISE NOTICE '✅ Organizations table has 4 policies (SELECT, INSERT, UPDATE, DELETE)';
+    RAISE NOTICE '✅ Organization members table has 4 policies (SELECT, INSERT, UPDATE, DELETE)';
+    RAISE NOTICE '✅ Super admins and admins can now access all organizations!';
+  ELSE
+    RAISE WARNING '⚠️  WARNING: Expected 4 policies per table';
+    RAISE WARNING '   Organizations: % policies (expected 4)', org_policies_count;
+    RAISE WARNING '   Organization members: % policies (expected 4)', org_member_policies_count;
+  END IF;
+
+  RAISE NOTICE '========================================';
+  RAISE NOTICE 'ADMIN BYPASS ENABLED';
+  RAISE NOTICE 'Super admins and admins can access all organizations';
+  RAISE NOTICE 'Regular users can only access organizations they are members of';
+  RAISE NOTICE '========================================';
+END $$;

@@ -1,94 +1,56 @@
-import React, { Component, ErrorInfo, ReactNode, ReactElement } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 
-type ErrorBoundaryFallbackProps = {
-  error: Error;
-  resetErrorBoundary: () => void;
-  className?: string;
-  style?: React.CSSProperties;
-};
-
-interface ErrorBoundaryProps {
+interface Props {
   children: ReactNode;
-  fallback?: ReactElement<ErrorBoundaryFallbackProps>;
-  onReset?: () => void;
 }
 
-interface ErrorBoundaryState {
+interface State {
   hasError: boolean;
-  error: Error | null;
-  errorInfo: ErrorInfo | null;
+  error?: Error;
 }
 
-export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
+export class ErrorBoundary extends Component<Props, State> {
+  constructor(props: Props) {
     super(props);
-    this.state = { 
-      hasError: false, 
-      error: null,
-      errorInfo: null
-    };
+    this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    // Update state so the next render will show the fallback UI.
-    return { 
-      hasError: true, 
-      error: error,
-      errorInfo: null
-    };
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Log the error to an error reporting service
     console.error('ErrorBoundary caught an error:', error, errorInfo);
-    this.setState({
-      error,
-      errorInfo
-    });
   }
 
-  resetErrorBoundary = () => {
-    this.setState({
-      hasError: false,
-      error: null,
-      errorInfo: null
-    });
-    this.props.onReset?.();
-  };
-
   render() {
-    if (this.state.hasError && this.state.error) {
-      if (this.props.fallback) {
-        // Clone the fallback element to ensure it has the correct styling
-        const fallbackProps: ErrorBoundaryFallbackProps = {
-          error: this.state.error,
-          resetErrorBoundary: this.resetErrorBoundary,
-          style: { ...this.props.fallback.props.style, color: 'black', fontWeight: 'bold' },
-          className: `${this.props.fallback.props.className || ''} font-bold text-black`
-        };
-        return React.cloneElement(this.props.fallback, fallbackProps);
-      }
-
-      // Default fallback UI if none provided
+    if (this.state.hasError) {
       return (
-        <div className="p-4 bg-gray-100 border border-gray-800 rounded-md">
-          <h3 className="font-semibold leading-none tracking-tight text-lg font-bold text-black">Something went wrong.</h3>
-          <details className="mt-2 text-sm text-black font-medium">
-            <summary className="font-bold cursor-pointer">Error details</summary>
-            <div className="mt-2 p-2 bg-white rounded">
-              {this.state.error.toString()}
-              <br />
-              <pre className="mt-2 text-xs overflow-auto">
-                {this.state.errorInfo?.componentStack}
-              </pre>
-            </div>
-          </details>
-          <button
-            onClick={this.resetErrorBoundary}
-            className="mt-3 px-4 py-2 bg-black text-white font-bold rounded hover:bg-gray-800 transition-colors"
-          >
-            Try again
-          </button>
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6">
+            <h1 className="text-2xl font-bold text-red-600 mb-4">
+              Something went wrong
+            </h1>
+            <p className="text-gray-600 mb-4">
+              The application encountered an error. Please refresh the page to try again.
+            </p>
+            {this.state.error && (
+              <details className="mb-4">
+                <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
+                  Error details
+                </summary>
+                <pre className="mt-2 text-xs bg-gray-100 p-2 rounded overflow-auto">
+                  {this.state.error.toString()}
+                </pre>
+              </details>
+            )}
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors"
+            >
+              Refresh Page
+            </button>
+          </div>
         </div>
       );
     }
@@ -96,5 +58,3 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return this.props.children;
   }
 }
-
-export default ErrorBoundary;

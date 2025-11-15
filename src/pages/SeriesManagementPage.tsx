@@ -31,8 +31,11 @@ export default function SeriesManagementPage() {
       setError(null);
 
       // Load series data
-      const seriesData = await eventSeriesService.getSeriesById(seriesId);
-      setSeries(seriesData);
+      const result = await eventSeriesService.getSeriesById(seriesId);
+      if (result.error) throw result.error;
+      if (result.data) {
+        setSeries(result.data as EventSeries);
+      }
 
       // Load parent event data
       const { data: eventData, error: eventError } = await supabase

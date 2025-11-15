@@ -5,13 +5,12 @@ import {
   CheckCircle, AlertCircle, XCircle, Eye, EyeOff, Link as LinkIcon,
   Unlink, Shield, Activity, TrendingUp, BarChart3
 } from 'lucide-react';
-import { Event } from '../../services/supabase';
+import { Event } from '../../types/database.types';
 
 interface EnhancedEvent extends Event {
   tickets_sold?: number;
   tickets_remaining?: number;
   checked_in_count?: number;
-  status_changed_at?: string;
   created_by_name?: string;
   updated_by_name?: string;
   status_changed_by_name?: string;

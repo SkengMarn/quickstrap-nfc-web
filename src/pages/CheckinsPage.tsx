@@ -375,7 +375,7 @@ const CheckinsPage = () => {
           c.wristbands?.nfc_id || 'N/A',
           c.wristbands?.category || 'N/A',
           c.location || '',
-          c.staff?.full_name || c.staff?.email || 'N/A',
+          'N/A', // Staff info not available in current schema
           `"${(c.notes || '').replace(/"/g, '""')}"`
         ].join(','))
       ];

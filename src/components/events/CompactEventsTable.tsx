@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Edit, Trash2, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown, X, ArrowRight, Plus, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight as ChevronRightIcon } from 'lucide-react';
-import { Event } from '../../services/supabase';
+import { Edit, Trash2, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown, X, ArrowRight, Plus, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight as ChevronRightIcon, Pencil } from 'lucide-react';
+import { supabase } from '../../services/supabase';
+import { Event } from '../../types/database.types';
 import SeriesForm from '../series/SeriesForm';
+import { toast } from 'react-toastify';
 
 // Scrolling text component for long content
 const ScrollingText: React.FC<{ text: string; className?: string }> = ({ text, className = '' }) => {
@@ -53,12 +55,13 @@ interface CompactEventsTableProps {
   events: EnhancedEvent[];
   onDelete: (id: string) => void;
   deletingId: string | null;
+  onRefresh?: () => void; // Optional callback to refresh data
 }
 
 type SortField = 'name' | 'start_date' | 'location' | 'capacity' | 'lifecycle_status';
 type SortDirection = 'asc' | 'desc' | null;
 
-const CompactEventsTable: React.FC<CompactEventsTableProps> = ({ events, onDelete, deletingId }) => {
+const CompactEventsTable: React.FC<CompactEventsTableProps> = ({ events, onDelete, deletingId, onRefresh }) => {
   const [sortField, setSortField] = useState<SortField>('start_date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [showSeriesForm, setShowSeriesForm] = useState(false);
@@ -66,6 +69,14 @@ const CompactEventsTable: React.FC<CompactEventsTableProps> = ({ events, onDelet
 
   // Track expanded events (showing their series)
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
+  
+  // Removed statusMenuOpen - now using inline editing for status too
+  
+  // Track inline editing
+  const [editingField, setEditingField] = useState<{ id: string; field: string; type: 'event' | 'series' } | null>(null);
+  const [editingValue, setEditingValue] = useState<string>('');
+  const [originalValue, setOriginalValue] = useState<string>(''); // Track original value to detect changes
+  const [hoveredName, setHoveredName] = useState<string | null>(null); // Track which name is being hovered
 
   // Pagination state
   const [page, setPage] = useState(0);
@@ -98,6 +109,172 @@ const CompactEventsTable: React.FC<CompactEventsTableProps> = ({ events, onDelet
     setSelectedEventForSeries(null);
     // Trigger a refresh of the events list
     window.location.reload();
+  };
+
+  const handleStatusChange = async (id: string, newStatus: string, type: 'event' | 'series' = 'event') => {
+    try {
+      // VALIDATION: If updating a series to 'active', check parent event status
+      if (type === 'series' && newStatus === 'active') {
+        // Find the series in the events data
+        let parentEvent: EnhancedEvent | null = null;
+        let seriesData: any = null;
+        
+        for (const event of events) {
+          if (event.series && event.series.length > 0) {
+            const foundSeries = event.series.find((s: any) => s.id === id);
+            if (foundSeries) {
+              parentEvent = event;
+              seriesData = foundSeries;
+              break;
+            }
+          }
+        }
+
+        if (parentEvent) {
+          // Check if parent event is active
+          if (parentEvent.lifecycle_status !== 'active') {
+            toast.error(`Cannot activate series: Parent event "${parentEvent.name}" must be active first`);
+            return;
+          }
+        } else {
+          // If we can't find parent in current data, fetch from database
+          const { data: seriesInfo, error: fetchError } = await supabase
+            .from('event_series')
+            .select('parent_event_id, events!inner(name, lifecycle_status)')
+            .eq('id', id)
+            .single();
+
+          if (fetchError) {
+            console.error('Error fetching series parent:', fetchError);
+            toast.error('Failed to validate parent event status');
+            return;
+          }
+
+          if (seriesInfo && (seriesInfo as any).events.lifecycle_status !== 'active') {
+            toast.error(`Cannot activate series: Parent event "${(seriesInfo as any).events.name}" must be active first`);
+            return;
+          }
+        }
+      }
+
+      // Proceed with update
+      if (type === 'series') {
+        // Use RPC function for series to handle state transitions properly
+        const { data, error } = await supabase.rpc('update_series_status', {
+          p_series_id: id,
+          p_new_status: newStatus
+        });
+
+        if (error) throw error;
+      } else {
+        // Direct update for events
+        const updateData: any = {
+          lifecycle_status: newStatus,
+          status_changed_at: new Date().toISOString(),
+          is_active: newStatus === 'active'
+        };
+        
+        const { error } = await supabase
+          .from('events')
+          .update(updateData)
+          .eq('id', id);
+
+        if (error) throw error;
+      }
+
+      const itemType = type === 'event' ? 'Event' : 'Series';
+      toast.success(`${itemType} status updated to ${newStatus.charAt(0).toUpperCase() + newStatus.slice(1)}!`);
+      
+      // Trigger refresh if callback provided
+      if (onRefresh) {
+        setTimeout(() => onRefresh(), 300);
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast.error('Failed to update status');
+    }
+  };
+
+  // Get possible status transitions from current status
+  const getNextStatuses = (currentStatus: string) => {
+    const allStatuses = ['draft', 'active', 'completed', 'cancelled'];
+    return allStatuses.filter(s => s !== currentStatus);
+  };
+
+  // Handle inline field updates
+  const handleFieldUpdate = async (id: string, field: string, value: string, type: 'event' | 'series') => {
+    // Check if value actually changed
+    if (value === originalValue) {
+      // No change, just cancel editing
+      setEditingField(null);
+      setEditingValue('');
+      setOriginalValue('');
+      return;
+    }
+
+    try {
+      // Special handling for lifecycle_status - use handleStatusChange instead
+      if (field === 'lifecycle_status') {
+        setEditingField(null);
+        setEditingValue('');
+        setOriginalValue('');
+        await handleStatusChange(id, value, type);
+        return;
+      }
+
+      const table = type === 'event' ? 'events' : 'event_series';
+      const updateData: any = { [field]: value };
+      
+      // Add updated_at timestamp
+      updateData.updated_at = new Date().toISOString();
+      
+      const { error } = await supabase
+        .from(table)
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast.success(`${field.charAt(0).toUpperCase() + field.slice(1)} updated successfully!`);
+      setEditingField(null);
+      setEditingValue('');
+      setOriginalValue('');
+      
+      // Trigger refresh if callback provided
+      if (onRefresh) {
+        setTimeout(() => onRefresh(), 300);
+      }
+    } catch (error) {
+      console.error(`Error updating ${field}:`, error);
+      toast.error(`Failed to update ${field}`);
+      setEditingField(null);
+      setEditingValue('');
+      setOriginalValue('');
+    }
+  };
+
+  // Start editing a field
+  const startEditing = (id: string, field: string, currentValue: string, type: 'event' | 'series') => {
+    setEditingField({ id, field, type });
+    setEditingValue(currentValue || '');
+    setOriginalValue(currentValue || ''); // Store original value for comparison
+  };
+
+  // Cancel editing
+  const cancelEditing = () => {
+    setEditingField(null);
+    setEditingValue('');
+    setOriginalValue('');
+  };
+
+  // Save on Enter, cancel on Escape
+  const handleKeyDown = (e: React.KeyboardEvent, id: string, field: string, type: 'event' | 'series') => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleFieldUpdate(id, field, editingValue, type);
+    } else if (e.key === 'Escape') {
+      cancelEditing();
+    }
   };
 
   // Toggle expand/collapse of series
@@ -488,9 +665,42 @@ const CompactEventsTable: React.FC<CompactEventsTableProps> = ({ events, onDelet
                       ) : (
                         <div className="w-4" />
                       )}
-                      <Link to={`/events/${event.id}`} className="hover:text-blue-600 font-medium">
-                        {event.name}
-                      </Link>
+                      {editingField?.id === event.id && editingField?.field === 'name' ? (
+                        <input
+                          type="text"
+                          value={editingValue}
+                          onChange={(e) => setEditingValue(e.target.value)}
+                          onBlur={() => handleFieldUpdate(event.id, 'name', editingValue, 'event')}
+                          onKeyDown={(e) => handleKeyDown(e, event.id, 'name', 'event')}
+                          className="px-2 py-1 text-sm border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          autoFocus
+                        />
+                      ) : (
+                        <div 
+                          className="flex items-center gap-1 group"
+                          onMouseEnter={() => setHoveredName(event.id)}
+                          onMouseLeave={() => setHoveredName(null)}
+                        >
+                          <Link 
+                            to={`/events/${event.id}`}
+                            className="hover:text-blue-600 font-medium"
+                          >
+                            {event.name}
+                          </Link>
+                          {hoveredName === event.id && (
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                startEditing(event.id, 'name', event.name, 'event');
+                              }}
+                              className="p-0.5 hover:bg-blue-100 rounded transition-colors"
+                              title="Edit name"
+                            >
+                              <Pencil className="h-3 w-3 text-blue-600" />
+                            </button>
+                          )}
+                        </div>
+                      )}
                       {event.series && event.series.length > 0 && (
                         <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded font-medium">
                           {event.series.length} {event.series.length === 1 ? 'series' : 'series'}
@@ -499,13 +709,71 @@ const CompactEventsTable: React.FC<CompactEventsTableProps> = ({ events, onDelet
                     </div>
                   </td>
                   <td className={`${cellPadding} text-xs text-gray-600`}>
-                    {event.location || '-'}
+                    {editingField?.id === event.id && editingField?.field === 'location' ? (
+                      <input
+                        type="text"
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        onBlur={() => handleFieldUpdate(event.id, 'location', editingValue, 'event')}
+                        onKeyDown={(e) => handleKeyDown(e, event.id, 'location', 'event')}
+                        className="px-2 py-1 text-xs border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+                        autoFocus
+                      />
+                    ) : (
+                      <span
+                        onDoubleClick={() => startEditing(event.id, 'location', event.location || '', 'event')}
+                        className="cursor-pointer hover:text-blue-600 hover:underline"
+                        title="Double-click to edit"
+                      >
+                        {event.location || '-'}
+                      </span>
+                    )}
                   </td>
                   <td className={`${cellPadding} text-xs text-gray-600`}>
-                    {formatDate(event.start_date)}
+                    {editingField?.id === event.id && editingField?.field === 'start_date' ? (
+                      <input
+                        type="datetime-local"
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        onBlur={() => handleFieldUpdate(event.id, 'start_date', editingValue, 'event')}
+                        onKeyDown={(e) => handleKeyDown(e, event.id, 'start_date', 'event')}
+                        className="px-2 py-1 text-xs border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        autoFocus
+                      />
+                    ) : (
+                      <span
+                        onDoubleClick={() => {
+                          const isoDate = new Date(event.start_date).toISOString().slice(0, 16);
+                          startEditing(event.id, 'start_date', isoDate, 'event');
+                        }}
+                        className="cursor-pointer hover:text-blue-600 hover:underline"
+                        title="Double-click to edit"
+                      >
+                        {formatDate(event.start_date)}
+                      </span>
+                    )}
                   </td>
                   <td className={`${cellPadding} text-xs text-gray-600`}>
-                    {event.capacity && event.capacity > 0 ? event.capacity.toLocaleString() : 'Unlimited'}
+                    {editingField?.id === event.id && editingField?.field === 'capacity' ? (
+                      <input
+                        type="number"
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        onBlur={() => handleFieldUpdate(event.id, 'capacity', editingValue, 'event')}
+                        onKeyDown={(e) => handleKeyDown(e, event.id, 'capacity', 'event')}
+                        className="px-2 py-1 text-xs border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 w-24"
+                        autoFocus
+                        min="0"
+                      />
+                    ) : (
+                      <span
+                        onDoubleClick={() => startEditing(event.id, 'capacity', String(event.capacity || 0), 'event')}
+                        className="cursor-pointer hover:text-blue-600 hover:underline"
+                        title="Double-click to edit"
+                      >
+                        {event.capacity && event.capacity > 0 ? event.capacity.toLocaleString() : 'Unlimited'}
+                      </span>
+                    )}
                   </td>
                   <td className={`${cellPadding} text-xs text-gray-600`}>
                     {event.wristbands_count?.toLocaleString() || 0}
@@ -514,9 +782,29 @@ const CompactEventsTable: React.FC<CompactEventsTableProps> = ({ events, onDelet
                     {event.tickets_sold || 0} / {event.checked_in_count || 0}
                   </td>
                   <td className={cellPadding}>
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${getLifecycleStatusColor(event.lifecycle_status || 'draft')}`}>
-                      {(event.lifecycle_status || 'draft').charAt(0).toUpperCase() + (event.lifecycle_status || 'draft').slice(1)}
-                    </span>
+                    {editingField?.id === event.id && editingField?.field === 'lifecycle_status' ? (
+                      <select
+                        value={editingValue}
+                        onChange={(e) => setEditingValue(e.target.value)}
+                        onBlur={() => handleFieldUpdate(event.id, 'lifecycle_status', editingValue, 'event')}
+                        onKeyDown={(e) => handleKeyDown(e, event.id, 'lifecycle_status', 'event')}
+                        className="px-2 py-1 text-xs border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        autoFocus
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="active">Active</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    ) : (
+                      <span 
+                        onDoubleClick={() => startEditing(event.id, 'lifecycle_status', event.lifecycle_status || 'draft', 'event')}
+                        className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer hover:opacity-80 transition-opacity ${getLifecycleStatusColor(event.lifecycle_status || 'draft')}`}
+                        title="Double-click to edit"
+                      >
+                        {(event.lifecycle_status || 'draft').charAt(0).toUpperCase() + (event.lifecycle_status || 'draft').slice(1)}
+                      </span>
+                    )}
                   </td>
                   <td className={cellPadding}>
                     {isActive && (
@@ -539,7 +827,7 @@ const CompactEventsTable: React.FC<CompactEventsTableProps> = ({ events, onDelet
                     <div className="flex items-center justify-end gap-1.5">
                       <button
                         onClick={() => handleAddSeries(event)}
-                        className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
+                        className="p-1 text-purple-600 hover:bg-purple-50 rounded transition-colors"
                         title="Add Series"
                       >
                         <Plus className="h-3.5 w-3.5" />
@@ -578,12 +866,42 @@ const CompactEventsTable: React.FC<CompactEventsTableProps> = ({ events, onDelet
                       <td className={`${seriesPadding} text-xs text-gray-700`}>
                         <div className="flex items-center gap-1.5 pl-5">
                           <ArrowRight className="h-3 w-3 text-blue-500 flex-shrink-0" />
-                          <Link 
-                            to={`/events/${series.id}`} 
-                            className="italic font-medium hover:text-blue-600 transition-colors"
-                          >
-                            {series.name}
-                          </Link>
+                          {editingField?.id === series.id && editingField?.field === 'name' ? (
+                            <input
+                              type="text"
+                              value={editingValue}
+                              onChange={(e) => setEditingValue(e.target.value)}
+                              onBlur={() => handleFieldUpdate(series.id, 'name', editingValue, 'series')}
+                              onKeyDown={(e) => handleKeyDown(e, series.id, 'name', 'series')}
+                              className="px-2 py-1 text-xs border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              autoFocus
+                            />
+                          ) : (
+                            <div 
+                              className="flex items-center gap-1 group"
+                              onMouseEnter={() => setHoveredName(series.id)}
+                              onMouseLeave={() => setHoveredName(null)}
+                            >
+                              <Link 
+                                to={`/events/${series.id}`}
+                                className="italic font-medium hover:text-blue-600 transition-colors"
+                              >
+                                {series.name}
+                              </Link>
+                              {hoveredName === series.id && (
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    startEditing(series.id, 'name', series.name, 'series');
+                                  }}
+                                  className="p-0.5 hover:bg-blue-100 rounded transition-colors"
+                                  title="Edit name"
+                                >
+                                  <Pencil className="h-3 w-3 text-blue-600" />
+                                </button>
+                              )}
+                            </div>
+                          )}
                           {series.sequence_number && (
                             <span className="px-1 py-0.5 bg-blue-200 text-blue-800 text-[9px] rounded font-semibold">
                               #{series.sequence_number}
@@ -592,13 +910,71 @@ const CompactEventsTable: React.FC<CompactEventsTableProps> = ({ events, onDelet
                         </div>
                       </td>
                       <td className={`${seriesPadding} text-[10px] text-gray-500`}>
-                        {event.location || '-'}
+                        {editingField?.id === series.id && editingField?.field === 'location' ? (
+                          <input
+                            type="text"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={() => handleFieldUpdate(series.id, 'location', editingValue, 'series')}
+                            onKeyDown={(e) => handleKeyDown(e, series.id, 'location', 'series')}
+                            className="px-2 py-1 text-[10px] border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 w-full"
+                            autoFocus
+                          />
+                        ) : (
+                          <span
+                            onDoubleClick={() => startEditing(series.id, 'location', series.location || event.location || '', 'series')}
+                            className="cursor-pointer hover:text-blue-600 hover:underline"
+                            title="Double-click to edit"
+                          >
+                            {series.location || event.location || '-'}
+                          </span>
+                        )}
                       </td>
                       <td className={`${seriesPadding} text-[10px] text-gray-500`}>
-                        {formatDate(series.start_date)}
+                        {editingField?.id === series.id && editingField?.field === 'start_date' ? (
+                          <input
+                            type="datetime-local"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={() => handleFieldUpdate(series.id, 'start_date', editingValue, 'series')}
+                            onKeyDown={(e) => handleKeyDown(e, series.id, 'start_date', 'series')}
+                            className="px-2 py-1 text-[10px] border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            autoFocus
+                          />
+                        ) : (
+                          <span
+                            onDoubleClick={() => {
+                              const isoDate = new Date(series.start_date).toISOString().slice(0, 16);
+                              startEditing(series.id, 'start_date', isoDate, 'series');
+                            }}
+                            className="cursor-pointer hover:text-blue-600 hover:underline"
+                            title="Double-click to edit"
+                          >
+                            {formatDate(series.start_date)}
+                          </span>
+                        )}
                       </td>
                       <td className={`${seriesPadding} text-[10px] text-gray-500`}>
-                        {series.capacity && series.capacity > 0 ? series.capacity.toLocaleString() : '-'}
+                        {editingField?.id === series.id && editingField?.field === 'capacity' ? (
+                          <input
+                            type="number"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={() => handleFieldUpdate(series.id, 'capacity', editingValue, 'series')}
+                            onKeyDown={(e) => handleKeyDown(e, series.id, 'capacity', 'series')}
+                            className="px-2 py-1 text-[10px] border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 w-20"
+                            autoFocus
+                            min="0"
+                          />
+                        ) : (
+                          <span
+                            onDoubleClick={() => startEditing(series.id, 'capacity', String(series.capacity || 0), 'series')}
+                            className="cursor-pointer hover:text-blue-600 hover:underline"
+                            title="Double-click to edit"
+                          >
+                            {series.capacity && series.capacity > 0 ? series.capacity.toLocaleString() : '-'}
+                          </span>
+                        )}
                       </td>
                       <td className={`${seriesPadding} text-[10px] text-gray-600`}>
                         {series.wristbands_count?.toLocaleString() || 0}
@@ -607,9 +983,29 @@ const CompactEventsTable: React.FC<CompactEventsTableProps> = ({ events, onDelet
                         {series.tickets_count || 0} / {series.checked_in_count || 0}
                       </td>
                       <td className={seriesPadding}>
-                        <span className={`inline-flex items-center px-1 py-0.5 rounded text-[9px] font-medium ${getLifecycleStatusColor(series.lifecycle_status || 'draft')}`}>
-                          {(series.lifecycle_status || 'draft').charAt(0).toUpperCase() + (series.lifecycle_status || 'draft').slice(1)}
-                        </span>
+                        {editingField?.id === series.id && editingField?.field === 'lifecycle_status' ? (
+                          <select
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            onBlur={() => handleFieldUpdate(series.id, 'lifecycle_status', editingValue, 'series')}
+                            onKeyDown={(e) => handleKeyDown(e, series.id, 'lifecycle_status', 'series')}
+                            className="px-2 py-1 text-[9px] border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            autoFocus
+                          >
+                            <option value="draft">Draft</option>
+                            <option value="active">Active</option>
+                            <option value="completed">Completed</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                        ) : (
+                          <span 
+                            onDoubleClick={() => startEditing(series.id, 'lifecycle_status', series.lifecycle_status || 'draft', 'series')}
+                            className={`inline-flex items-center px-1 py-0.5 rounded text-[9px] font-medium cursor-pointer hover:opacity-80 transition-opacity ${getLifecycleStatusColor(series.lifecycle_status || 'draft')}`}
+                            title="Double-click to edit"
+                          >
+                            {(series.lifecycle_status || 'draft').charAt(0).toUpperCase() + (series.lifecycle_status || 'draft').slice(1)}
+                          </span>
+                        )}
                       </td>
                       <td className={seriesPadding}>
                         {seriesIsActive && (

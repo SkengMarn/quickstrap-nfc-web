@@ -1,5 +1,10 @@
 node_modules
 .vercel
+dist
+
+# pnpm
+pnpm-lock.yaml
+.pnpm-store
 
 # Environment variables
 .env

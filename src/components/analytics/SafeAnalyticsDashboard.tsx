@@ -793,6 +793,7 @@ const SafeAnalyticsDashboard: React.FC<SafeAnalyticsDashboardProps> = ({ eventId
               loadBusinessAnalytics();
             }}
             className="flex items-center space-x-2"
+            type="button"
           >
             <RefreshCw className="w-4 h-4" />
             <span>Refresh</span>

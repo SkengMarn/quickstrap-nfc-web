@@ -29,11 +29,14 @@ const EventsPage = () => {
     fetchEvents()
   }, [])
 
-  const fetchEvents = async () => {
+  const fetchEvents = async (silent: boolean = false) => {
     const startTime = performance.now();
 
     try {
-      setLoading(true);
+      // Only show loading state if not a silent refresh
+      if (!silent) {
+        setLoading(true);
+      }
 
       // First, refresh event activations to ensure scheduled events are activated
       await eventActivationService.autoRefreshIfNeeded();
@@ -224,7 +227,10 @@ const EventsPage = () => {
       logger.error('Failed to fetch events', 'EventsPage', error);
       setEvents([]);
     } finally {
-      setLoading(false);
+      // Only update loading state if not a silent refresh
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }
   
@@ -266,7 +272,7 @@ const EventsPage = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <LoadingSpinner size="lg" message="Loading events..." />
+        <LoadingSpinner size="lg" />
       </div>
     )
   }
@@ -304,7 +310,12 @@ const EventsPage = () => {
         </div>
       ) : (
         <div className="card">
-          <CompactEventsTable events={events} onDelete={deleteEvent} deletingId={deletingId} />
+          <CompactEventsTable 
+            events={events} 
+            onDelete={deleteEvent} 
+            deletingId={deletingId}
+            onRefresh={() => fetchEvents(true)}
+          />
         </div>
       )}
     </div>

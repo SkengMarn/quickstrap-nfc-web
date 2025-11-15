@@ -10,8 +10,9 @@ import './styles/design-system.css';
 // Eager load only critical components
 import DashboardLayout from './components/layout/DashboardLayout';
 import LoadingScreen from './components/common/LoadingScreen';
-import ErrorBoundary from './components/common/ErrorBoundary';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { OrganizationProvider } from './contexts/OrganizationContext';
+import { checkSystemHealth } from './utils/selfHealing';
 
 // Lazy load all pages for better performance
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -49,15 +50,21 @@ export const App = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [showTour, setShowTour] = useState(false);
+  const [systemHealthy, setSystemHealthy] = useState(true);
+  const [healthBannerDismissed, setHealthBannerDismissed] = useState(false);
+  const [healthCheckProgress, setHealthCheckProgress] = useState<{
+    step: string;
+    current: number;
+    total: number;
+  } | null>(null);
 
   useEffect(() => {
-    // Add timeout to prevent infinite loading
+    // Initialize auth FIRST (critical path) with reduced timeout
     const timeout = setTimeout(() => {
       console.warn('Auth initialization timeout, proceeding without session');
       setLoading(false);
-    }, 10000); // 10 second timeout
+    }, 3000); // Reduced to 3 seconds for faster load
 
-    // Get initial session with error handling
     supabase.auth.getSession()
       .then(({ data: { session }, error }) => {
         clearTimeout(timeout);
@@ -67,6 +74,35 @@ export const App = () => {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+
+        // Run health check AFTER auth completes and UI is shown (non-blocking)
+        setTimeout(() => {
+          console.log('[App] Running background system health check...');
+          checkSystemHealth((step, current, total) => {
+            setHealthCheckProgress({ step, current, total });
+          })
+            .then(health => {
+              console.log('[App] Health check result:', health);
+              setSystemHealthy(health.healthy);
+              setHealthCheckProgress(null);
+              if (!health.healthy) {
+                console.error('[App] System health check failed:', health.errors);
+                console.error('[App] Failed checks:', Object.entries(health.checks).filter(([_, v]) => !v));
+                
+                // Auto-dismiss health warning after 10 seconds
+                setTimeout(() => {
+                  setHealthBannerDismissed(true);
+                }, 10000);
+              } else {
+                console.log('[App] System health check passed in', health.duration, 'ms');
+              }
+            })
+            .catch(error => {
+              console.error('[App] System health check error:', error);
+              setSystemHealthy(false);
+              setHealthCheckProgress(null);
+            });
+        }, 100); // Defer health check by 100ms to allow UI to render first
       })
       .catch((error) => {
         clearTimeout(timeout);
@@ -74,7 +110,6 @@ export const App = () => {
         setLoading(false);
       });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -98,6 +133,52 @@ export const App = () => {
 
   return (
     <ErrorBoundary>
+      {/* Show warning banner if system is unhealthy */}
+      {!systemHealthy && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: '#f59e0b',
+          color: 'white',
+          padding: '12px 16px',
+          textAlign: 'center',
+          zIndex: 9999,
+          fontSize: '14px',
+          fontWeight: 'bold',
+        }}>
+          <div>System health check failed. Some features may not work correctly.</div>
+          {healthCheckProgress && (
+            <div style={{
+              marginTop: '8px',
+              fontSize: '12px',
+              fontWeight: 'normal',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}>
+              <div style={{
+                width: '200px',
+                height: '4px',
+                backgroundColor: 'rgba(255,255,255,0.3)',
+                borderRadius: '2px',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  width: `${(healthCheckProgress.current / healthCheckProgress.total) * 100}%`,
+                  height: '100%',
+                  backgroundColor: 'white',
+                  transition: 'width 0.3s ease'
+                }} />
+              </div>
+              <span>{healthCheckProgress.step} ({healthCheckProgress.current}/{healthCheckProgress.total})</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Interactive Tour */}
       {session && showTour && (
         <InteractiveTour

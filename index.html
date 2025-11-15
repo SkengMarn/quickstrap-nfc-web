@@ -1,26 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Event Admin Portal</title>
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
-          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
-          crossorigin=""/>
-    <!-- CSS will be injected by Vite in development -->
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QuickStrap NFC</title>
   </head>
   <body>
     <div id="root"></div>
-    <!-- Load environment variables before the app -->
-    <script type="module">
-      // Environment variables will be injected by Vite during build
-      window.ENV = {
-        REACT_APP_SUPABASE_URL: import.meta.env.VITE_REACT_APP_SUPABASE_URL,
-        REACT_APP_SUPABASE_ANON_KEY: import.meta.env.VITE_REACT_APP_SUPABASE_ANON_KEY
-      };
-    </script>
-    <!-- Load the app -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

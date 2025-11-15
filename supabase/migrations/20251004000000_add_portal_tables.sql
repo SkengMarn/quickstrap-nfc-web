@@ -324,12 +324,12 @@ SELECT
   MAX(cl.timestamp) as last_checkin,
   e.start_date,
   e.end_date,
-  e.total_capacity
+  e.capacity as total_capacity
 FROM public.events e
 LEFT JOIN public.wristbands w ON w.event_id = e.id
 LEFT JOIN public.checkin_logs cl ON cl.event_id = e.id AND cl.is_test_data = false
 LEFT JOIN public.gates g ON g.event_id = e.id
-GROUP BY e.id, e.name, e.start_date, e.end_date, e.total_capacity;
+GROUP BY e.id, e.name, e.start_date, e.end_date, e.capacity;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_event_analytics_event_id ON public.event_analytics(event_id);
 
